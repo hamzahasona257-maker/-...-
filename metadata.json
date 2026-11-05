@@ -1,0 +1,6 @@
+{
+  "name": "Wave Donuts",
+  "description": "Ride the Sweet Wave. Modern artisanal donut shop ordering platform with customizable glazes, delivery zone calculation, live order tracking, and admin command center in English and Arabic.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
