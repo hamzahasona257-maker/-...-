@@ -1,0 +1,809 @@
+{
+  "users": [
+    {
+      "id": "usr_owner_1793632811052",
+      "name": "مالك ويف دونتس (الرئيسي)",
+      "email": "owner@wavedonuts.eg",
+      "phone": "01000000001",
+      "passwordHash": "$2b$10$QkJWEh9XNF2svX3r/TmEqOKEs/ZlTGZVBxvaHLXZjk73L3J6jghBW",
+      "role": "OWNER",
+      "permissions": {
+        "canManageProducts": true,
+        "canManageOrders": true,
+        "canManageDelivery": true,
+        "canManageSettings": true,
+        "canManageCustomers": true
+      },
+      "isActive": true,
+      "createdAt": "2026-11-02T15:20:11.052Z",
+      "updatedAt": "2026-11-02T15:59:31.868Z"
+    },
+    {
+      "id": "usr_cust_1793632811296_4t7r",
+      "name": "عميل رقم 2 (محمود حسن)",
+      "email": "cust2_1793632811076@test.eg",
+      "phone": "01033334444",
+      "passwordHash": "$2b$10$H6v3SCo1ppbIP3mkC/1EoO8VMc2OQ.A2b.2D.G6RYJDz4Vx4KtKPi",
+      "role": "CUSTOMER",
+      "isActive": true,
+      "block": {
+        "isBlocked": false
+      },
+      "notes": [],
+      "createdAt": "2026-11-02T15:20:11.296Z",
+      "updatedAt": "2026-11-02T15:20:11.552Z"
+    },
+    {
+      "id": "usr_admin_1793632811548_026g",
+      "name": "مشرف عمليات جديد",
+      "email": "newadmin_1793632811437@wavedonuts.eg",
+      "phone": "01055556666",
+      "passwordHash": "$2b$10$0jsurBHzIZoBnoanOLkKe.zKuR/T9B42ymezQGXcSXwSQ7WWvO06O",
+      "role": "ADMIN",
+      "permissions": {
+        "canManageProducts": true,
+        "canManageOrders": true,
+        "canManageDelivery": false,
+        "canManageSettings": false,
+        "canManageCustomers": true
+      },
+      "isActive": true,
+      "createdAt": "2026-11-02T15:20:11.548Z",
+      "updatedAt": "2026-11-02T15:20:11.548Z"
+    }
+  ],
+  "addresses": [],
+  "deliveryLocations": [
+    {
+      "governorate": "القاهرة",
+      "city": "القاهرة الجديدة",
+      "area": "التجمع الخامس",
+      "deliveryFee": 30,
+      "minOrder": 50,
+      "estimatedMin": 35,
+      "isActive": true,
+      "id": "loc_1793632811075_eyez"
+    }
+  ],
+  "categories": [
+    {
+      "id": "cat_1793632811067_du0g",
+      "nameAr": "دونتس محشية",
+      "nameEn": "Filled Donuts",
+      "slug": "filled-donuts"
+    }
+  ],
+  "products": [
+    {
+      "categoryId": "cat_1793632811067_du0g",
+      "nameAr": "دونت شوكولاتة نوتيلا",
+      "nameEn": "Nutella Donut",
+      "descAr": "",
+      "descEn": "",
+      "ingredients": "",
+      "images": [],
+      "mainImage": "",
+      "basePrice": 50,
+      "isPublished": true,
+      "isAvailable": true,
+      "options": [],
+      "id": "prod_1793632811070_fgjmq",
+      "createdAt": "2026-11-02T15:20:11.070Z",
+      "updatedAt": "2026-11-02T15:20:11.070Z"
+    }
+  ],
+  "customizationGroups": [],
+  "orders": [
+    {
+      "id": "ord_1793632811308_dath7",
+      "orderNumber": 101,
+      "userId": "usr_cust_1793632811183_q3ud",
+      "customerName": "عميل رقم 1 (أحمد عادل)",
+      "customerPhone": "01011112222",
+      "customerEmail": "cust1_1793632811076@test.eg",
+      "addressId": "addr_1793632811303_kphi",
+      "addressDetails": {
+        "title": "المنزل",
+        "governorate": "القاهرة",
+        "city": "القاهرة الجديدة",
+        "area": "التجمع الخامس",
+        "street": "شارع التسعين الجنوبي",
+        "buildingNumber": "15",
+        "floor": "",
+        "apartment": "",
+        "landmark": ""
+      },
+      "deliveryLocationId": "loc_1793632811075_eyez",
+      "locationSummary": "القاهرة - القاهرة الجديدة - التجمع الخامس",
+      "status": "PENDING",
+      "statusHistory": [
+        {
+          "status": "PENDING",
+          "timestamp": "2026-11-02T15:20:11.307Z",
+          "note": "تم استلام الطلب من العميل والدفع عند الاستلام"
+        }
+      ],
+      "subtotal": 100,
+      "deliveryFee": 30,
+      "total": 130,
+      "notes": "يرجى الاتصال قبل الوصول",
+      "paymentMethod": "COD",
+      "createdAt": "2026-11-02T15:20:11.307Z",
+      "updatedAt": "2026-11-02T15:20:11.307Z",
+      "items": [
+        {
+          "id": "item_1793632811307_d0pm",
+          "productId": "prod_1793632811070_fgjmq",
+          "productNameAr": "دونت شوكولاتة نوتيلا",
+          "productNameEn": "Nutella Donut",
+          "imageUrl": "",
+          "quantity": 2,
+          "unitPrice": 50
+        }
+      ],
+      "customerDeleted": true
+    },
+    {
+      "id": "ord_1793796838038_fq20u",
+      "orderNumber": 102,
+      "userId": "usr_cust_1793796837996_87bo",
+      "customerName": "سارة مصطفى",
+      "customerPhone": "01122334455",
+      "customerEmail": "testcust_1793796837871@test.eg",
+      "addressId": "addr_1793796838002_u755",
+      "addressDetails": {
+        "title": "المنزل",
+        "governorate": "القاهرة",
+        "city": "القاهرة الجديدة",
+        "area": "التجمع الخامس",
+        "street": "شارع التسعين الشمالي",
+        "buildingNumber": "14B",
+        "floor": "3",
+        "apartment": "12",
+        "landmark": "بجوار مجمع البنوك"
+      },
+      "deliveryLocationId": "loc_1793632811075_eyez",
+      "locationSummary": "القاهرة - القاهرة الجديدة - التجمع الخامس",
+      "status": "PENDING",
+      "statusHistory": [
+        {
+          "status": "PENDING",
+          "timestamp": "2026-11-04T12:53:58.038Z",
+          "note": "تم استلام الطلب من العميل والدفع عند الاستلام"
+        }
+      ],
+      "subtotal": 130,
+      "deliveryFee": 30,
+      "total": 160,
+      "notes": "توصيل سريع لو سمحتوا",
+      "paymentMethod": "COD",
+      "createdAt": "2026-11-04T12:53:58.038Z",
+      "updatedAt": "2026-11-04T12:53:58.038Z",
+      "items": [
+        {
+          "id": "item_1793796838038_ffuz",
+          "productId": "prod_1793632811070_fgjmq",
+          "productNameAr": "دونت شوكولاتة نوتيلا",
+          "productNameEn": "Nutella Donut",
+          "imageUrl": "",
+          "quantity": 2,
+          "basePrice": 50,
+          "unitPrice": 65,
+          "selectedCustomizations": [
+            {
+              "groupId": "grp_1793796838033_ox2ub",
+              "groupNameAr": "حجم المشروب",
+              "groupNameEn": "Drink Size",
+              "type": "SINGLE_SELECT",
+              "optionId": "opt_1793796838033_cpma",
+              "optionNameAr": "كبير (Large)",
+              "priceDelta": 15
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "settings": {
+    "businessNameAr": "ويف دونتس",
+    "businessNameEn": "Wave Donuts",
+    "sloganAr": "اركب موجة الحلاوة.",
+    "sloganEn": "Ride the Sweet Wave.",
+    "phone": "01000000001",
+    "whatsapp": "",
+    "aboutAr": "متجر ويف دونتس المتخصص في أشهى أنواع الدونتس الطازجة المخبوزة بأعلى معايير الجودة.",
+    "aboutEn": "Wave Donuts specializes in freshly fried and glazed artisanal donuts.",
+    "announcementAr": "أهلاً بكم في متجر ويف دونتس! ترقبوا إطلاق قائمة منتجاتنا الطازجة قريباً.",
+    "announcementEn": "Welcome to Wave Donuts! Our fresh menu will be available soon.",
+    "showAnnouncement": true,
+    "instagramUrl": "",
+    "facebookUrl": "",
+    "tiktokUrl": "",
+    "workingHoursAr": "يومياً من ١٠ صباحاً حتى ١١ مساءً",
+    "workingHoursEn": "Daily 10:00 AM - 11:00 PM",
+    "isOpenForOrders": true
+  },
+  "auditLogs": [
+    {
+      "id": "log_1793968697022_e6xr",
+      "performedById": "usr_owner_1793632811052",
+      "performedByName": "مالك ويف دونتس (الرئيسي)",
+      "performedByRole": "OWNER",
+      "action": "حذف منطقة التوصيل: دجلة المعادي",
+      "timestamp": "2026-11-06T12:38:17.022Z"
+    },
+    {
+      "id": "log_1793968697011_7or7",
+      "performedById": "usr_owner_1793632811052",
+      "performedByName": "مالك ويف دونتس (الرئيسي)",
+      "performedByRole": "OWNER",
+      "action": "تعديل منطقة التوصيل: دجلة المعادي",
+      "details": "رسوم التوصيل الجديدة: 65 ج.م.",
+      "timestamp": "2026-11-06T12:38:17.011Z"
+    },
+    {
+      "id": "log_1793968696997_gcca",
+      "performedById": "usr_owner_1793632811052",
+      "performedByName": "مالك ويف دونتس (الرئيسي)",
+      "performedByRole": "OWNER",
+      "action": "إضافة منطقة توصيل: القاهرة - دجلة المعادي",
+      "details": "رسوم التوصيل: 45 ج.م. | الحد الأدنى: 80 ج.م.",
+      "timestamp": "2026-11-06T12:38:16.997Z"
+    },
+    {
+      "id": "log_1793968677476_4ns0",
+      "performedById": "usr_owner_1793632811052",
+      "performedByName": "مالك ويف دونتس (الرئيسي)",
+      "performedByRole": "OWNER",
+      "action": "تعديل منطقة التوصيل: دجلة المعادي",
+      "details": "رسوم التوصيل الجديدة: 65 ج.م.",
+      "timestamp": "2026-11-06T12:37:57.476Z"
+    },
+    {
+      "id": "log_1793968677453_t729",
+      "performedById": "usr_owner_1793632811052",
+      "performedByName": "مالك ويف دونتس (الرئيسي)",
+      "performedByRole": "OWNER",
+      "action": "إضافة منطقة توصيل: القاهرة - دجلة المعادي",
+      "details": "رسوم التوصيل: 45 ج.م. | الحد الأدنى: 80 ج.م.",
+      "timestamp": "2026-11-06T12:37:57.453Z"
+    },
+    {
+      "id": "log_1793966448803_cbpk",
+      "performedById": "usr_owner_1793632811052",
+      "performedByName": "مالك ويف دونتس (الرئيسي)",
+      "performedByRole": "OWNER",
+      "action": "تحديث إعدادات المتجر ومعلومات التواصل",
+      "details": "تم تعديل أوقات العمل أو الإعلانات أو أرقام الهواتف",
+      "timestamp": "2026-11-06T12:00:48.803Z"
+    },
+    {
+      "id": "log_1793800144925_gved",
+      "performedById": "usr_owner_1793632811052",
+      "performedByName": "مالك ويف دونتس (الرئيسي)",
+      "performedByRole": "OWNER",
+      "action": "إلغاء حظر العميل: عميل رقم 2 (محمود حسن)",
+      "details": "تم فك الحظر عن الحساب ورقم الهاتف 01033334444",
+      "timestamp": "2026-11-04T13:49:04.925Z"
+    },
+    {
+      "id": "log_1793800144924_p32v",
+      "performedById": "usr_owner_1793632811052",
+      "performedByName": "مالك ويف دونتس (الرئيسي)",
+      "performedByRole": "OWNER",
+      "action": "حظر العميل: عميل رقم 2 (محمود حسن)",
+      "details": "النوع: دائم | السبب: حظر اختباري مؤقت | الهاتف: 01033334444",
+      "timestamp": "2026-11-04T13:49:04.924Z"
+    },
+    {
+      "id": "log_1793796838063_o1z2",
+      "performedById": "usr_owner_1793632811052",
+      "performedByName": "مالك ويف دونتس (الرئيسي)",
+      "performedByRole": "OWNER",
+      "action": "إضافة منتج دونتس جديد: سبانش لاتيه بارد",
+      "details": "السعر: 65 ج.م. | الحالة: منشور",
+      "timestamp": "2026-11-04T12:53:58.063Z"
+    },
+    {
+      "id": "log_1793796838059_2ey5",
+      "performedById": "usr_owner_1793632811052",
+      "performedByName": "مالك ويف دونتس (الرئيسي)",
+      "performedByRole": "OWNER",
+      "action": "إضافة تصنيف جديد: مشروبات ويف الساخنة والباردة",
+      "timestamp": "2026-11-04T12:53:58.059Z"
+    },
+    {
+      "id": "log_1793796838054_uwqp",
+      "performedById": "usr_owner_1793632811052",
+      "performedByName": "مالك ويف دونتس (الرئيسي)",
+      "performedByRole": "OWNER",
+      "action": "حذف حساب المشرف: Test Operational Admin",
+      "details": "البريد: tempadmin_1793796837624@wavedonuts.eg",
+      "timestamp": "2026-11-04T12:53:58.054Z"
+    },
+    {
+      "id": "log_1793796838047_iisa",
+      "performedById": "usr_owner_1793632811052",
+      "performedByName": "مالك ويف دونتس (الرئيسي)",
+      "performedByRole": "OWNER",
+      "action": "إلغاء حظر العميل: سارة مصطفى",
+      "details": "تم فك الحظر عن الحساب ورقم الهاتف 01122334455",
+      "timestamp": "2026-11-04T12:53:58.047Z"
+    },
+    {
+      "id": "log_1793796838041_75nz",
+      "performedById": "usr_owner_1793632811052",
+      "performedByName": "مالك ويف دونتس (الرئيسي)",
+      "performedByRole": "OWNER",
+      "action": "حظر العميل: سارة مصطفى",
+      "details": "النوع: دائم | السبب: تكرار عدم استلام الطلبات عند وصول المندوب | الهاتف: 01122334455",
+      "timestamp": "2026-11-04T12:53:58.041Z"
+    },
+    {
+      "id": "log_1793796838033_2dg3",
+      "performedById": "usr_owner_1793632811052",
+      "performedByName": "مالك ويف دونتس (الرئيسي)",
+      "performedByRole": "OWNER",
+      "action": "إنشاء مجموعة تخصيص جديدة: حجم المشروب",
+      "details": "النوع: SINGLE_SELECT | عدد الخيارات: 2",
+      "timestamp": "2026-11-04T12:53:58.033Z"
+    },
+    {
+      "id": "log_1793796838028_driz",
+      "performedById": "usr_owner_1793632811052",
+      "performedByName": "مالك ويف دونتس (الرئيسي)",
+      "performedByRole": "OWNER",
+      "action": "حذف مجموعة تخصيص: حجم المشروب",
+      "details": "تم حذف المجموعة مع الحفاظ على سجلات الطلبات التاريخية دون أي تأثر",
+      "timestamp": "2026-11-04T12:53:58.028Z"
+    },
+    {
+      "id": "log_1793796838025_yrdy",
+      "performedById": "usr_owner_1793632811052",
+      "performedByName": "مالك ويف دونتس (الرئيسي)",
+      "performedByRole": "OWNER",
+      "action": "حذف مجموعة تخصيص: حجم المشروب",
+      "details": "تم حذف المجموعة مع الحفاظ على سجلات الطلبات التاريخية دون أي تأثر",
+      "timestamp": "2026-11-04T12:53:58.025Z"
+    },
+    {
+      "id": "log_1793796838023_5q22",
+      "performedById": "usr_owner_1793632811052",
+      "performedByName": "مالك ويف دونتس (الرئيسي)",
+      "performedByRole": "OWNER",
+      "action": "حذف مجموعة تخصيص: حجم المشروب",
+      "details": "تم حذف المجموعة مع الحفاظ على سجلات الطلبات التاريخية دون أي تأثر",
+      "timestamp": "2026-11-04T12:53:58.023Z"
+    },
+    {
+      "id": "log_1793796838020_hgqa",
+      "performedById": "usr_owner_1793632811052",
+      "performedByName": "مالك ويف دونتس (الرئيسي)",
+      "performedByRole": "OWNER",
+      "action": "حذف مجموعة تخصيص: حجم المشروب",
+      "details": "تم حذف المجموعة مع الحفاظ على سجلات الطلبات التاريخية دون أي تأثر",
+      "timestamp": "2026-11-04T12:53:58.020Z"
+    },
+    {
+      "id": "log_1793796838015_tjl3",
+      "performedById": "usr_owner_1793632811052",
+      "performedByName": "مالك ويف دونتس (الرئيسي)",
+      "performedByRole": "OWNER",
+      "action": "تفعيل حساب العميل: سارة مصطفى",
+      "details": "البريد: testcust_1793796837871@test.eg | الهاتف: 01122334455",
+      "timestamp": "2026-11-04T12:53:58.015Z"
+    },
+    {
+      "id": "log_1793796838009_d4oh",
+      "performedById": "usr_owner_1793632811052",
+      "performedByName": "مالك ويف دونتس (الرئيسي)",
+      "performedByRole": "OWNER",
+      "action": "تعطيل حساب العميل: سارة مصطفى",
+      "details": "البريد: testcust_1793796837871@test.eg | الهاتف: 01122334455",
+      "timestamp": "2026-11-04T12:53:58.009Z"
+    },
+    {
+      "id": "log_1793796837752_h980",
+      "performedById": "usr_owner_1793632811052",
+      "performedByName": "مالك ويف دونتس (الرئيسي)",
+      "performedByRole": "OWNER",
+      "action": "إضافة مشرف جديد: Test Operational Admin",
+      "details": "البريد: tempadmin_1793796837624@wavedonuts.eg | الصلاحيات: {\"canManageProducts\":true,\"canManageOrders\":true,\"canManageDelivery\":false,\"canManageSettings\":false,\"canManageCustomers\":true}",
+      "timestamp": "2026-11-04T12:53:57.752Z"
+    },
+    {
+      "id": "log_1793796790474_kdk4",
+      "performedById": "usr_owner_1793632811052",
+      "performedByName": "مالك ويف دونتس (الرئيسي)",
+      "performedByRole": "OWNER",
+      "action": "إضافة منتج دونتس جديد: سبانش لاتيه بارد",
+      "details": "السعر: 65 ج.م. | الحالة: منشور",
+      "timestamp": "2026-11-04T12:53:10.474Z"
+    },
+    {
+      "id": "log_1793796790471_3y84",
+      "performedById": "usr_owner_1793632811052",
+      "performedByName": "مالك ويف دونتس (الرئيسي)",
+      "performedByRole": "OWNER",
+      "action": "إضافة تصنيف جديد: مشروبات ويف الساخنة والباردة",
+      "timestamp": "2026-11-04T12:53:10.471Z"
+    },
+    {
+      "id": "log_1793796790467_hdi3",
+      "performedById": "usr_owner_1793632811052",
+      "performedByName": "مالك ويف دونتس (الرئيسي)",
+      "performedByRole": "OWNER",
+      "action": "حذف حساب المشرف: Test Operational Admin",
+      "details": "البريد: tempadmin_1793796790041@wavedonuts.eg",
+      "timestamp": "2026-11-04T12:53:10.467Z"
+    },
+    {
+      "id": "log_1793796790461_850y",
+      "performedById": "usr_owner_1793632811052",
+      "performedByName": "مالك ويف دونتس (الرئيسي)",
+      "performedByRole": "OWNER",
+      "action": "إلغاء حظر العميل: سارة مصطفى",
+      "details": "تم فك الحظر عن الحساب ورقم الهاتف 01122334455",
+      "timestamp": "2026-11-04T12:53:10.461Z"
+    },
+    {
+      "id": "log_1793796790455_b829",
+      "performedById": "usr_owner_1793632811052",
+      "performedByName": "مالك ويف دونتس (الرئيسي)",
+      "performedByRole": "OWNER",
+      "action": "حظر العميل: سارة مصطفى",
+      "details": "النوع: دائم | السبب: تكرار عدم استلام الطلبات عند وصول المندوب | الهاتف: 01122334455",
+      "timestamp": "2026-11-04T12:53:10.455Z"
+    },
+    {
+      "id": "log_1793796790445_9q9x",
+      "performedById": "usr_owner_1793632811052",
+      "performedByName": "مالك ويف دونتس (الرئيسي)",
+      "performedByRole": "OWNER",
+      "action": "إنشاء مجموعة تخصيص جديدة: حجم المشروب",
+      "details": "النوع: SINGLE_SELECT | عدد الخيارات: 2",
+      "timestamp": "2026-11-04T12:53:10.445Z"
+    },
+    {
+      "id": "log_1793796790441_arqf",
+      "performedById": "usr_owner_1793632811052",
+      "performedByName": "مالك ويف دونتس (الرئيسي)",
+      "performedByRole": "OWNER",
+      "action": "تفعيل حساب العميل: سارة مصطفى",
+      "details": "البريد: testcust_1793796790317@test.eg | الهاتف: 01122334455",
+      "timestamp": "2026-11-04T12:53:10.441Z"
+    },
+    {
+      "id": "log_1793796790434_9jsi",
+      "performedById": "usr_owner_1793632811052",
+      "performedByName": "مالك ويف دونتس (الرئيسي)",
+      "performedByRole": "OWNER",
+      "action": "تعطيل حساب العميل: سارة مصطفى",
+      "details": "البريد: testcust_1793796790317@test.eg | الهاتف: 01122334455",
+      "timestamp": "2026-11-04T12:53:10.434Z"
+    },
+    {
+      "id": "log_1793796790167_4618",
+      "performedById": "usr_owner_1793632811052",
+      "performedByName": "مالك ويف دونتس (الرئيسي)",
+      "performedByRole": "OWNER",
+      "action": "إضافة مشرف جديد: Test Operational Admin",
+      "details": "البريد: tempadmin_1793796790041@wavedonuts.eg | الصلاحيات: {\"canManageProducts\":true,\"canManageOrders\":true,\"canManageDelivery\":false,\"canManageSettings\":false,\"canManageCustomers\":true}",
+      "timestamp": "2026-11-04T12:53:10.167Z"
+    },
+    {
+      "id": "log_1793796758305_f40r",
+      "performedById": "usr_owner_1793632811052",
+      "performedByName": "مالك ويف دونتس (الرئيسي)",
+      "performedByRole": "OWNER",
+      "action": "إضافة منتج دونتس جديد: سبانش لاتيه بارد",
+      "details": "السعر: 65 ج.م. | الحالة: منشور",
+      "timestamp": "2026-11-04T12:52:38.305Z"
+    },
+    {
+      "id": "log_1793796758302_mi81",
+      "performedById": "usr_owner_1793632811052",
+      "performedByName": "مالك ويف دونتس (الرئيسي)",
+      "performedByRole": "OWNER",
+      "action": "إضافة تصنيف جديد: مشروبات ويف الساخنة والباردة",
+      "timestamp": "2026-11-04T12:52:38.302Z"
+    },
+    {
+      "id": "log_1793796758299_afs1",
+      "performedById": "usr_owner_1793632811052",
+      "performedByName": "مالك ويف دونتس (الرئيسي)",
+      "performedByRole": "OWNER",
+      "action": "حذف حساب المشرف: Test Operational Admin",
+      "details": "البريد: tempadmin_1793796757909@wavedonuts.eg",
+      "timestamp": "2026-11-04T12:52:38.299Z"
+    },
+    {
+      "id": "log_1793796758295_x9kw",
+      "performedById": "usr_owner_1793632811052",
+      "performedByName": "مالك ويف دونتس (الرئيسي)",
+      "performedByRole": "OWNER",
+      "action": "إلغاء حظر العميل: سارة مصطفى",
+      "details": "تم فك الحظر عن الحساب ورقم الهاتف 01122334455",
+      "timestamp": "2026-11-04T12:52:38.295Z"
+    },
+    {
+      "id": "log_1793796758290_9bvw",
+      "performedById": "usr_owner_1793632811052",
+      "performedByName": "مالك ويف دونتس (الرئيسي)",
+      "performedByRole": "OWNER",
+      "action": "حظر العميل: سارة مصطفى",
+      "details": "النوع: دائم | السبب: تكرار عدم استلام الطلبات عند وصول المندوب | الهاتف: 01122334455",
+      "timestamp": "2026-11-04T12:52:38.290Z"
+    },
+    {
+      "id": "log_1793796758283_w122",
+      "performedById": "usr_owner_1793632811052",
+      "performedByName": "مالك ويف دونتس (الرئيسي)",
+      "performedByRole": "OWNER",
+      "action": "إنشاء مجموعة تخصيص جديدة: حجم المشروب",
+      "details": "النوع: SINGLE_SELECT | عدد الخيارات: 2",
+      "timestamp": "2026-11-04T12:52:38.283Z"
+    },
+    {
+      "id": "log_1793796758280_fuub",
+      "performedById": "usr_owner_1793632811052",
+      "performedByName": "مالك ويف دونتس (الرئيسي)",
+      "performedByRole": "OWNER",
+      "action": "تفعيل حساب العميل: سارة مصطفى",
+      "details": "البريد: testcust_1793796758154@test.eg | الهاتف: 01122334455",
+      "timestamp": "2026-11-04T12:52:38.280Z"
+    },
+    {
+      "id": "log_1793796758274_jugn",
+      "performedById": "usr_owner_1793632811052",
+      "performedByName": "مالك ويف دونتس (الرئيسي)",
+      "performedByRole": "OWNER",
+      "action": "تعطيل حساب العميل: سارة مصطفى",
+      "details": "البريد: testcust_1793796758154@test.eg | الهاتف: 01122334455",
+      "timestamp": "2026-11-04T12:52:38.274Z"
+    },
+    {
+      "id": "log_1793796758029_mu8b",
+      "performedById": "usr_owner_1793632811052",
+      "performedByName": "مالك ويف دونتس (الرئيسي)",
+      "performedByRole": "OWNER",
+      "action": "إضافة مشرف جديد: Test Operational Admin",
+      "details": "البريد: tempadmin_1793796757909@wavedonuts.eg | الصلاحيات: {\"canManageProducts\":true,\"canManageOrders\":true,\"canManageDelivery\":false,\"canManageSettings\":false,\"canManageCustomers\":true}",
+      "timestamp": "2026-11-04T12:52:38.029Z"
+    },
+    {
+      "id": "log_1793796745024_mjmq",
+      "performedById": "usr_owner_1793632811052",
+      "performedByName": "مالك ويف دونتس (الرئيسي)",
+      "performedByRole": "OWNER",
+      "action": "إضافة منتج دونتس جديد: سبانش لاتيه بارد",
+      "details": "السعر: 65 ج.م. | الحالة: منشور",
+      "timestamp": "2026-11-04T12:52:25.024Z"
+    },
+    {
+      "id": "log_1793796745019_zsj7",
+      "performedById": "usr_owner_1793632811052",
+      "performedByName": "مالك ويف دونتس (الرئيسي)",
+      "performedByRole": "OWNER",
+      "action": "إضافة تصنيف جديد: مشروبات ويف الساخنة والباردة",
+      "timestamp": "2026-11-04T12:52:25.019Z"
+    },
+    {
+      "id": "log_1793796745015_6s6u",
+      "performedById": "usr_owner_1793632811052",
+      "performedByName": "مالك ويف دونتس (الرئيسي)",
+      "performedByRole": "OWNER",
+      "action": "حذف حساب المشرف: Test Operational Admin",
+      "details": "البريد: tempadmin_1793796744589@wavedonuts.eg",
+      "timestamp": "2026-11-04T12:52:25.015Z"
+    },
+    {
+      "id": "log_1793796745010_t0aj",
+      "performedById": "usr_owner_1793632811052",
+      "performedByName": "مالك ويف دونتس (الرئيسي)",
+      "performedByRole": "OWNER",
+      "action": "إلغاء حظر العميل: سارة مصطفى",
+      "details": "تم فك الحظر عن الحساب ورقم الهاتف 01122334455",
+      "timestamp": "2026-11-04T12:52:25.010Z"
+    },
+    {
+      "id": "log_1793796745005_agcu",
+      "performedById": "usr_owner_1793632811052",
+      "performedByName": "مالك ويف دونتس (الرئيسي)",
+      "performedByRole": "OWNER",
+      "action": "حظر العميل: سارة مصطفى",
+      "details": "النوع: دائم | السبب: تكرار عدم استلام الطلبات عند وصول المندوب | الهاتف: 01122334455",
+      "timestamp": "2026-11-04T12:52:25.005Z"
+    },
+    {
+      "id": "log_1793796744995_bfup",
+      "performedById": "usr_owner_1793632811052",
+      "performedByName": "مالك ويف دونتس (الرئيسي)",
+      "performedByRole": "OWNER",
+      "action": "إنشاء مجموعة تخصيص جديدة: حجم المشروب",
+      "details": "النوع: SINGLE_SELECT | عدد الخيارات: 2",
+      "timestamp": "2026-11-04T12:52:24.995Z"
+    },
+    {
+      "id": "log_1793796744990_bzdc",
+      "performedById": "usr_owner_1793632811052",
+      "performedByName": "مالك ويف دونتس (الرئيسي)",
+      "performedByRole": "OWNER",
+      "action": "تفعيل حساب العميل: سارة مصطفى",
+      "details": "البريد: testcust_1793796744846@test.eg | الهاتف: 01122334455",
+      "timestamp": "2026-11-04T12:52:24.990Z"
+    },
+    {
+      "id": "log_1793796744977_2wxz",
+      "performedById": "usr_owner_1793632811052",
+      "performedByName": "مالك ويف دونتس (الرئيسي)",
+      "performedByRole": "OWNER",
+      "action": "تعطيل حساب العميل: سارة مصطفى",
+      "details": "البريد: testcust_1793796744846@test.eg | الهاتف: 01122334455",
+      "timestamp": "2026-11-04T12:52:24.977Z"
+    },
+    {
+      "id": "log_1793796744723_pdic",
+      "performedById": "usr_owner_1793632811052",
+      "performedByName": "مالك ويف دونتس (الرئيسي)",
+      "performedByRole": "OWNER",
+      "action": "إضافة مشرف جديد: Test Operational Admin",
+      "details": "البريد: tempadmin_1793796744589@wavedonuts.eg | الصلاحيات: {\"canManageProducts\":true,\"canManageOrders\":true,\"canManageDelivery\":false,\"canManageSettings\":false,\"canManageCustomers\":true}",
+      "timestamp": "2026-11-04T12:52:24.723Z"
+    },
+    {
+      "id": "log_1793796616657_nj4i",
+      "performedById": "usr_owner_1793632811052",
+      "performedByName": "مالك ويف دونتس (الرئيسي)",
+      "performedByRole": "OWNER",
+      "action": "حذف حساب المشرف: Test Operational Admin",
+      "details": "البريد: tempadmin_1793796616239@wavedonuts.eg",
+      "timestamp": "2026-11-04T12:50:16.657Z"
+    },
+    {
+      "id": "log_1793796616653_sgdl",
+      "performedById": "usr_owner_1793632811052",
+      "performedByName": "مالك ويف دونتس (الرئيسي)",
+      "performedByRole": "OWNER",
+      "action": "إلغاء حظر العميل: سارة مصطفى",
+      "details": "تم فك الحظر عن الحساب ورقم الهاتف 01122334455",
+      "timestamp": "2026-11-04T12:50:16.653Z"
+    },
+    {
+      "id": "log_1793796616648_wvxm",
+      "performedById": "usr_owner_1793632811052",
+      "performedByName": "مالك ويف دونتس (الرئيسي)",
+      "performedByRole": "OWNER",
+      "action": "حظر العميل: سارة مصطفى",
+      "details": "النوع: دائم | السبب: تكرار عدم استلام الطلبات عند وصول المندوب | الهاتف: 01122334455",
+      "timestamp": "2026-11-04T12:50:16.648Z"
+    },
+    {
+      "id": "log_1793796616639_4eqy",
+      "performedById": "usr_owner_1793632811052",
+      "performedByName": "مالك ويف دونتس (الرئيسي)",
+      "performedByRole": "OWNER",
+      "action": "إنشاء مجموعة تخصيص جديدة: حجم المشروب",
+      "details": "النوع: SINGLE_SELECT | عدد الخيارات: 2",
+      "timestamp": "2026-11-04T12:50:16.639Z"
+    },
+    {
+      "id": "log_1793796616633_euol",
+      "performedById": "usr_owner_1793632811052",
+      "performedByName": "مالك ويف دونتس (الرئيسي)",
+      "performedByRole": "OWNER",
+      "action": "تفعيل حساب العميل: سارة مصطفى",
+      "details": "البريد: testcust_1793796616488@test.eg | الهاتف: 01122334455",
+      "timestamp": "2026-11-04T12:50:16.633Z"
+    },
+    {
+      "id": "log_1793796616625_ubch",
+      "performedById": "usr_owner_1793632811052",
+      "performedByName": "مالك ويف دونتس (الرئيسي)",
+      "performedByRole": "OWNER",
+      "action": "تعطيل حساب العميل: سارة مصطفى",
+      "details": "البريد: testcust_1793796616488@test.eg | الهاتف: 01122334455",
+      "timestamp": "2026-11-04T12:50:16.625Z"
+    },
+    {
+      "id": "log_1793796616356_fya1",
+      "performedById": "usr_owner_1793632811052",
+      "performedByName": "مالك ويف دونتس (الرئيسي)",
+      "performedByRole": "OWNER",
+      "action": "إضافة مشرف جديد: Test Operational Admin",
+      "details": "البريد: tempadmin_1793796616239@wavedonuts.eg | الصلاحيات: {\"canManageProducts\":true,\"canManageOrders\":true,\"canManageDelivery\":false,\"canManageSettings\":false,\"canManageCustomers\":true}",
+      "timestamp": "2026-11-04T12:50:16.356Z"
+    },
+    {
+      "id": "log_1793796588327_70id",
+      "performedById": "usr_owner_1793632811052",
+      "performedByName": "مالك ويف دونتس (الرئيسي)",
+      "performedByRole": "OWNER",
+      "action": "إضافة مشرف جديد: Test Operational Admin",
+      "details": "البريد: tempadmin_1793796588206@wavedonuts.eg | الصلاحيات: {\"canManageProducts\":true,\"canManageOrders\":true,\"canManageDelivery\":false,\"canManageSettings\":false,\"canManageCustomers\":true}",
+      "timestamp": "2026-11-04T12:49:48.327Z"
+    },
+    {
+      "id": "log_1793635171868_3jx6",
+      "performedById": "usr_owner_1793632811052",
+      "performedByName": "مالك ويف دونتس (الرئيسي)",
+      "performedByRole": "OWNER",
+      "action": "تحديث بيانات الحساب الشخصي لمالك المتجر",
+      "details": "البريد: owner@wavedonuts.eg | الاسم: مالك ويف دونتس (الرئيسي)",
+      "timestamp": "2026-11-02T15:59:31.868Z"
+    },
+    {
+      "id": "log_1793632811552_ekej",
+      "performedById": "usr_owner_1793632811052",
+      "performedByName": "مالك ويف دونتس",
+      "performedByRole": "OWNER",
+      "action": "تفعيل حساب العميل: عميل رقم 2 (محمود حسن)",
+      "details": "البريد: cust2_1793632811076@test.eg | الهاتف: 01033334444",
+      "timestamp": "2026-11-02T15:20:11.552Z"
+    },
+    {
+      "id": "log_1793632811548_vtcc",
+      "performedById": "usr_owner_1793632811052",
+      "performedByName": "مالك ويف دونتس",
+      "performedByRole": "OWNER",
+      "action": "إضافة مشرف جديد: مشرف عمليات جديد",
+      "details": "البريد: newadmin_1793632811437@wavedonuts.eg | الصلاحيات: {\"canManageProducts\":true,\"canManageOrders\":true,\"canManageDelivery\":false,\"canManageSettings\":false,\"canManageCustomers\":true}",
+      "timestamp": "2026-11-02T15:20:11.548Z"
+    },
+    {
+      "id": "log_1793632811433_jocd",
+      "performedById": "usr_owner_1793632811052",
+      "performedByName": "مالك ويف دونتس",
+      "performedByRole": "OWNER",
+      "action": "تعطيل حساب العميل: عميل رقم 2 (محمود حسن)",
+      "details": "البريد: cust2_1793632811076@test.eg | الهاتف: 01033334444",
+      "timestamp": "2026-11-02T15:20:11.433Z"
+    },
+    {
+      "id": "log_1793632811428_ztdg",
+      "performedById": "usr_owner_1793632811052",
+      "performedByName": "مالك ويف دونتس",
+      "performedByRole": "OWNER",
+      "action": "حذف حساب العميل: عميل رقم 1 (أحمد عادل)",
+      "details": "تم حذف الحساب (cust1_1793632811076@test.eg) مع الحفاظ على 1 طلب سابق في سجل المبيعات والمحاسبة بالكامل.",
+      "timestamp": "2026-11-02T15:20:11.428Z"
+    },
+    {
+      "id": "log_1793632811075_oqun",
+      "performedById": "usr_owner_1793632811052",
+      "performedByName": "مالك ويف دونتس",
+      "performedByRole": "OWNER",
+      "action": "إضافة منطقة توصيل: القاهرة - التجمع الخامس",
+      "details": "رسوم التوصيل: 30 ج.م. | الحد الأدنى: 50 ج.م.",
+      "timestamp": "2026-11-02T15:20:11.075Z"
+    },
+    {
+      "id": "log_1793632811070_wx8i",
+      "performedById": "usr_owner_1793632811052",
+      "performedByName": "مالك ويف دونتس",
+      "performedByRole": "OWNER",
+      "action": "إضافة منتج دونتس جديد: دونت شوكولاتة نوتيلا",
+      "details": "السعر: 50 ج.م. | الحالة: منشور",
+      "timestamp": "2026-11-02T15:20:11.070Z"
+    },
+    {
+      "id": "log_1793632811067_5r98",
+      "performedById": "usr_owner_1793632811052",
+      "performedByName": "مالك ويف دونتس",
+      "performedByRole": "OWNER",
+      "action": "إضافة تصنيف جديد: دونتس محشية",
+      "timestamp": "2026-11-02T15:20:11.067Z"
+    },
+    {
+      "id": "log_1793632811052_89d6",
+      "performedById": "usr_owner_1793632811052",
+      "performedByName": "مالك ويف دونتس",
+      "performedByRole": "OWNER",
+      "action": "إنشاء حساب مالك المتجر الرئيسي (Owner)",
+      "details": "تم تأسيس حساب المالك الرئيسي: owner@wavedonuts.eg",
+      "timestamp": "2026-11-02T15:20:11.052Z"
+    }
+  ],
+  "blockedPhones": [],
+  "lastOrderNumber": 102
+}

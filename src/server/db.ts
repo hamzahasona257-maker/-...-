@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import { fileURLToPath } from 'url';
 import {
   UserProfile,
   Address,
@@ -17,6 +18,14 @@ import {
   CustomizationGroup,
   CustomizationOption,
   SelectedCustomizationItem,
+  ProductOption,
+  MonthlyAccountingSummary,
+  MonthlyAccountingReport,
+  MonthlyArchiveRecord,
+  SpecialOffer,
+  SpecialOfferItem,
+  Advertisement,
+  AdPlacement,
 } from '../types.ts';
 
 export interface UserInDB {
@@ -65,12 +74,41 @@ interface DatabaseSchema {
   settings: StoreSettings;
   auditLogs: AuditLog[];
   blockedPhones: BlockedPhoneEntry[];
+  monthlyArchives: MonthlyArchiveRecord[];
+  activeAccountingMonth?: string;
+  offers: SpecialOffer[];
+  advertisements: Advertisement[];
   lastOrderNumber: number;
 }
 
-const DB_DIR = path.resolve(process.cwd(), 'data');
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Reliable workspace data directory resolution regardless of process cwd
+function resolveDataDir(): string {
+  const candidateDirs = [
+    path.resolve(process.cwd(), 'data'),
+    path.resolve(__dirname, '../../data'),
+    path.resolve(__dirname, '../data'),
+  ];
+  for (const dir of candidateDirs) {
+    if (fs.existsSync(dir) && fs.existsSync(path.join(dir, 'wave_donuts_db.json'))) {
+      return dir;
+    }
+  }
+  const defaultDir = candidateDirs[0];
+  if (!fs.existsSync(defaultDir)) {
+    try {
+      fs.mkdirSync(defaultDir, { recursive: true });
+    } catch {}
+  }
+  return defaultDir;
+}
+
+const DB_DIR = resolveDataDir();
 const DB_FILE = path.join(DB_DIR, 'wave_donuts_db.json');
 const DB_BACKUP_FILE = path.join(DB_DIR, 'wave_donuts_db.json.bak');
+const BACKUPS_DIR = path.join(DB_DIR, 'backups');
 
 const DEFAULT_OWNER_PERMISSIONS: AdminPermissions = {
   canManageProducts: true,
@@ -80,10 +118,93 @@ const DEFAULT_OWNER_PERMISSIONS: AdminPermissions = {
   canManageCustomers: true,
 };
 
-// Initialize Clean Persistent Database preserving all existing business records
+// Evaluate database completeness to prevent corrupt or empty overwrites
+function evaluateDatabaseIntegrity(data: any): number {
+  if (!data || typeof data !== 'object') return -1;
+  let score = 10;
+  if (Array.isArray(data.users)) {
+    score += data.users.length * 10;
+    const hasOwner = data.users.some((u: any) => u.role === 'OWNER');
+    if (hasOwner) score += 200; // Critical requirement: Must preserve Owner!
+    const hasAdmin = data.users.some((u: any) => u.role === 'ADMIN');
+    if (hasAdmin) score += 20;
+  }
+  if (Array.isArray(data.products)) {
+    score += data.products.length * 15;
+  }
+  if (Array.isArray(data.categories)) {
+    score += data.categories.length * 10;
+  }
+  if (Array.isArray(data.deliveryLocations)) {
+    score += data.deliveryLocations.length * 10;
+  }
+  if (Array.isArray(data.orders)) {
+    score += data.orders.length * 15;
+  }
+  if (Array.isArray(data.customizationGroups)) {
+    score += data.customizationGroups.length * 10;
+  }
+  if (Array.isArray(data.offers)) {
+    score += data.offers.length * 5;
+  }
+  if (Array.isArray(data.advertisements)) {
+    score += data.advertisements.length * 5;
+  }
+  if (data.settings && typeof data.settings === 'object' && data.settings.businessNameAr) {
+    score += 10;
+  }
+  return score;
+}
+
+function loadAndValidateFile(
+  filePath: string,
+  defaultSettings: StoreSettings
+): { data: DatabaseSchema | null; score: number } {
+  try {
+    if (!fs.existsSync(filePath)) return { data: null, score: -1 };
+    const content = fs.readFileSync(filePath, 'utf-8');
+    if (!content || !content.trim()) return { data: null, score: -1 };
+    const parsed = JSON.parse(content);
+    const score = evaluateDatabaseIntegrity(parsed);
+    if (score < 0) return { data: null, score: -1 };
+
+    const schema: DatabaseSchema = {
+      users: Array.isArray(parsed.users) ? parsed.users : [],
+      addresses: Array.isArray(parsed.addresses) ? parsed.addresses : [],
+      deliveryLocations: Array.isArray(parsed.deliveryLocations) ? parsed.deliveryLocations : [],
+      categories: Array.isArray(parsed.categories) ? parsed.categories : [],
+      products: Array.isArray(parsed.products) ? parsed.products : [],
+      customizationGroups: Array.isArray(parsed.customizationGroups) ? parsed.customizationGroups : [],
+      orders: Array.isArray(parsed.orders) ? parsed.orders : [],
+      settings:
+        parsed.settings && typeof parsed.settings === 'object'
+          ? { ...defaultSettings, ...parsed.settings }
+          : defaultSettings,
+      auditLogs: Array.isArray(parsed.auditLogs) ? parsed.auditLogs : [],
+      blockedPhones: Array.isArray(parsed.blockedPhones) ? parsed.blockedPhones : [],
+      monthlyArchives: Array.isArray(parsed.monthlyArchives) ? parsed.monthlyArchives : [],
+      activeAccountingMonth:
+        typeof parsed.activeAccountingMonth === 'string'
+          ? parsed.activeAccountingMonth
+          : undefined,
+      offers: Array.isArray(parsed.offers) ? parsed.offers : [],
+      advertisements: Array.isArray(parsed.advertisements) ? parsed.advertisements : [],
+      lastOrderNumber: typeof parsed.lastOrderNumber === 'number' ? parsed.lastOrderNumber : 100,
+    };
+    return { data: schema, score };
+  } catch (err) {
+    console.warn(`[Wave Donuts DB] Could not read or parse ${filePath}:`, err);
+    return { data: null, score: -1 };
+  }
+}
+
+// Multi-tier resilient database initialization
 function initDatabase(): DatabaseSchema {
   if (!fs.existsSync(DB_DIR)) {
     fs.mkdirSync(DB_DIR, { recursive: true });
+  }
+  if (!fs.existsSync(BACKUPS_DIR)) {
+    fs.mkdirSync(BACKUPS_DIR, { recursive: true });
   }
 
   const defaultSettings: StoreSettings = {
@@ -106,52 +227,80 @@ function initDatabase(): DatabaseSchema {
     isOpenForOrders: true,
   };
 
-  const loadFromPath = (filePath: string): DatabaseSchema | null => {
-    try {
-      if (fs.existsSync(filePath)) {
-        const content = fs.readFileSync(filePath, 'utf-8');
-        const parsed = JSON.parse(content);
-        return {
-          users: parsed.users || [],
-          addresses: parsed.addresses || [],
-          deliveryLocations: parsed.deliveryLocations || [],
-          categories: parsed.categories || [],
-          products: parsed.products || [],
-          customizationGroups: parsed.customizationGroups || [],
-          orders: parsed.orders || [],
-          settings: parsed.settings || defaultSettings,
-          auditLogs: parsed.auditLogs || [],
-          blockedPhones: parsed.blockedPhones || [],
-          lastOrderNumber: parsed.lastOrderNumber || 100,
-        };
-      }
-    } catch (err) {
-      console.error(`Error reading database from ${filePath}:`, err);
-    }
-    return null;
-  };
+  // 1. Check primary file
+  const primary = loadAndValidateFile(DB_FILE, defaultSettings);
+  const primaryHasOwner = primary.data?.users.some((u) => u.role === 'OWNER') ?? false;
 
-  // Try primary database file first
-  const primaryData = loadFromPath(DB_FILE);
-  if (primaryData) {
-    // Keep safety backup
+  // If primary file is healthy and contains owner and records, use it and maintain backup
+  if (primary.data && primaryHasOwner && primary.score >= 200) {
     try {
       fs.copyFileSync(DB_FILE, DB_BACKUP_FILE);
     } catch {}
-    return primaryData;
+    return primary.data;
   }
 
-  // Try backup if primary failed
-  const backupData = loadFromPath(DB_BACKUP_FILE);
-  if (backupData) {
-    console.warn('Restored database from safety backup file.');
+  // 2. If primary is missing, unparseable, or missing owner, search for best available backup
+  console.warn('[Wave Donuts DB] Primary database file missing or incomplete. Scanning for best recovery snapshot...');
+  
+  // If primary file exists but is corrupted, preserve it before anything else
+  if (fs.existsSync(DB_FILE) && (!primary.data || primary.score < 0)) {
+    const corruptBackup = path.join(BACKUPS_DIR, `wave_donuts_db_corrupted_${Date.now()}.json`);
     try {
-      fs.writeFileSync(DB_FILE, JSON.stringify(backupData, null, 2), 'utf-8');
+      fs.copyFileSync(DB_FILE, corruptBackup);
+      console.warn(`[Wave Donuts DB] Preserved corrupted database file to ${corruptBackup}`);
     } catch {}
-    return backupData;
   }
 
-  // Fallback initial schema if clean start
+  // Candidate files:
+  const candidateFiles: string[] = [];
+  if (fs.existsSync(DB_BACKUP_FILE)) candidateFiles.push(DB_BACKUP_FILE);
+
+  // Scan DB_DIR for all wave_donuts_db*.json* backups
+  try {
+    const dbDirFiles = fs.readdirSync(DB_DIR);
+    for (const file of dbDirFiles) {
+      if (file !== 'wave_donuts_db.json' && file.startsWith('wave_donuts_db') && !file.includes('.tmp.')) {
+        candidateFiles.push(path.join(DB_DIR, file));
+      }
+    }
+  } catch {}
+
+  // Scan BACKUPS_DIR
+  try {
+    const backupDirFiles = fs.readdirSync(BACKUPS_DIR);
+    for (const file of backupDirFiles) {
+      if (file.endsWith('.json') && !file.includes('corrupted')) {
+        candidateFiles.push(path.join(BACKUPS_DIR, file));
+      }
+    }
+  } catch {}
+
+  let bestData: DatabaseSchema | null = primary.data;
+  let highestScore = primary.score;
+  let bestFilePath: string = DB_FILE;
+
+  for (const filePath of candidateFiles) {
+    const res = loadAndValidateFile(filePath, defaultSettings);
+    if (res.data && res.score > highestScore) {
+      highestScore = res.score;
+      bestData = res.data;
+      bestFilePath = filePath;
+    }
+  }
+
+  if (bestData && highestScore > 0) {
+    console.info(`[Wave Donuts DB] Restored database from best available snapshot: ${bestFilePath} (Score: ${highestScore})`);
+    try {
+      fs.writeFileSync(DB_FILE, JSON.stringify(bestData, null, 2), 'utf-8');
+      fs.copyFileSync(DB_FILE, DB_BACKUP_FILE);
+    } catch (writeErr) {
+      console.error('[Wave Donuts DB] Error writing restored database to primary file:', writeErr);
+    }
+    return bestData;
+  }
+
+  // 3. Absolute last resort fallback ONLY if no files or backups exist anywhere
+  console.warn('[Wave Donuts DB] No existing database or backups found. Initializing empty schema.');
   const cleanInitialData: DatabaseSchema = {
     users: [],
     addresses: [],
@@ -163,36 +312,122 @@ function initDatabase(): DatabaseSchema {
     settings: defaultSettings,
     auditLogs: [],
     blockedPhones: [],
+    monthlyArchives: [],
+    offers: [],
+    advertisements: [],
     lastOrderNumber: 100,
   };
 
-  fs.writeFileSync(DB_FILE, JSON.stringify(cleanInitialData, null, 2), 'utf-8');
+  try {
+    fs.writeFileSync(DB_FILE, JSON.stringify(cleanInitialData, null, 2), 'utf-8');
+  } catch {}
   return cleanInitialData;
 }
 
 class Database {
   private data: DatabaseSchema;
+  private lastAutoBackupTime = 0;
 
   constructor() {
     this.data = initDatabase();
   }
 
-  // Atomic file save with safety backup
+  // Safe Atomic file save with anti-wipe validation and multi-generational rotating backups
   private save() {
     try {
-      const tempFile = `${DB_FILE}.tmp.${Date.now()}`;
-      fs.writeFileSync(tempFile, JSON.stringify(this.data, null, 2), 'utf-8');
+      // 1. Pre-save Anti-Data-Loss Safety Guard
+      if (!this.data || typeof this.data !== 'object') {
+        throw new Error('[Wave Donuts DB] Fatal: Attempted to save invalid or null database object. Write aborted!');
+      }
+
+      // Invariant: If database already exists on disk, never overwrite with 0 users!
+      if (fs.existsSync(DB_FILE)) {
+        try {
+          const diskContent = fs.readFileSync(DB_FILE, 'utf-8');
+          const diskParsed = JSON.parse(diskContent);
+          const diskUsersCount = Array.isArray(diskParsed.users) ? diskParsed.users.length : 0;
+          const currentUsersCount = Array.isArray(this.data.users) ? this.data.users.length : 0;
+          if (diskUsersCount > 0 && currentUsersCount === 0) {
+            console.error('[Wave Donuts DB] CRITICAL ANOMALY: Refusing to save database because users list is empty while disk has existing users!');
+            throw new Error('Refusing to overwrite database: users list was unexpectedly cleared.');
+          }
+          const diskProductsCount = Array.isArray(diskParsed.products) ? diskParsed.products.length : 0;
+          const currentProductsCount = Array.isArray(this.data.products) ? this.data.products.length : 0;
+          if (diskProductsCount > 1 && currentProductsCount === 0) {
+            console.error('[Wave Donuts DB] CRITICAL ANOMALY: Refusing to save database because all products were unexpectedly cleared!');
+            throw new Error('Refusing to overwrite database: all products were unexpectedly cleared.');
+          }
+        } catch (e: any) {
+          if (e.message?.includes('Refusing')) throw e;
+          // If disk file couldn't be parsed, continue with saving healthy in-memory state
+        }
+      }
+
+      // Ensure all arrays exist
+      if (!Array.isArray(this.data.users)) this.data.users = [];
+      if (!Array.isArray(this.data.addresses)) this.data.addresses = [];
+      if (!Array.isArray(this.data.deliveryLocations)) this.data.deliveryLocations = [];
+      if (!Array.isArray(this.data.categories)) this.data.categories = [];
+      if (!Array.isArray(this.data.products)) this.data.products = [];
+      if (!Array.isArray(this.data.customizationGroups)) this.data.customizationGroups = [];
+      if (!Array.isArray(this.data.orders)) this.data.orders = [];
+      if (!Array.isArray(this.data.auditLogs)) this.data.auditLogs = [];
+      if (!Array.isArray(this.data.blockedPhones)) this.data.blockedPhones = [];
+      if (!Array.isArray(this.data.monthlyArchives)) this.data.monthlyArchives = [];
+      if (!Array.isArray(this.data.offers)) this.data.offers = [];
+      if (!Array.isArray(this.data.advertisements)) this.data.advertisements = [];
+
+      // 2. Atomic disk write
+      const tempFile = path.join(
+        DB_DIR,
+        `.tmp_db_${process.pid}_${Date.now()}_${Math.random().toString(36).substring(2, 6)}.json`
+      );
+      const payload = JSON.stringify(this.data, null, 2);
+
+      const fd = fs.openSync(tempFile, 'w');
+      fs.writeFileSync(fd, payload, 'utf-8');
+      fs.fsyncSync(fd);
+      fs.closeSync(fd);
+
       fs.renameSync(tempFile, DB_FILE);
+
+      // 3. Keep immediate primary backup
       try {
         fs.copyFileSync(DB_FILE, DB_BACKUP_FILE);
       } catch {}
-    } catch (err) {
-      console.error('Failed to save database file atomically, falling back:', err);
-      try {
-        fs.writeFileSync(DB_FILE, JSON.stringify(this.data, null, 2), 'utf-8');
-      } catch (e) {
-        console.error('Critical database write error:', e);
+
+      // 4. Maintain rotating multi-generational rolling backups (throttled to at most once per 30s)
+      const now = Date.now();
+      if (now - this.lastAutoBackupTime > 30000) {
+        this.lastAutoBackupTime = now;
+        try {
+          if (!fs.existsSync(BACKUPS_DIR)) {
+            fs.mkdirSync(BACKUPS_DIR, { recursive: true });
+          }
+          const timestampStr = new Date().toISOString().replace(/[:.]/g, '-');
+          const autoBackupPath = path.join(BACKUPS_DIR, `wave_donuts_db_auto_${timestampStr}.json`);
+          fs.copyFileSync(DB_FILE, autoBackupPath);
+
+          // Keep latest 20 backups, prune older ones
+          const files = fs
+            .readdirSync(BACKUPS_DIR)
+            .filter((f) => f.startsWith('wave_donuts_db_auto_') && f.endsWith('.json'))
+            .sort();
+          if (files.length > 20) {
+            const toDelete = files.slice(0, files.length - 20);
+            for (const f of toDelete) {
+              try {
+                fs.unlinkSync(path.join(BACKUPS_DIR, f));
+              } catch {}
+            }
+          }
+        } catch (backupErr) {
+          console.warn('[Wave Donuts DB] Rolling backup warning:', backupErr);
+        }
       }
+    } catch (err: any) {
+      console.error('[Wave Donuts DB] Critical database save error:', err);
+      throw err;
     }
   }
 
@@ -346,23 +581,6 @@ class Database {
       isActive: true,
       createdAt: owner.createdAt,
     };
-  }
-
-  // Reset Owner Slot (Only callable by authenticated Owner to release slot for first-time registration)
-  resetOwnerSlot(currentOwnerId: string): boolean {
-    const ownerIndex = this.data.users.findIndex((u) => u.id === currentOwnerId && u.role === 'OWNER');
-    if (ownerIndex === -1) return false;
-
-    const removed = this.data.users.splice(ownerIndex, 1)[0];
-    this.addAuditLog({
-      performedById: removed.id,
-      performedByName: removed.name,
-      performedByRole: 'OWNER',
-      action: 'إعادة ضبط خانة مالك المتجر',
-      details: 'تم تفريغ حساب المالك للسماح بإعادة التسجيل لأول مرة.',
-    });
-    this.save();
-    return true;
   }
 
   // Create an invited Admin (only Owner can invoke this)
@@ -520,7 +738,33 @@ class Database {
   }
 
   getUserByEmail(email: string): UserInDB | undefined {
-    return this.data.users.find((u) => u.email.toLowerCase() === email.toLowerCase());
+    if (!email) return undefined;
+    const clean = email.trim().toLowerCase();
+    return this.data.users.find((u) => u.email && u.email.trim().toLowerCase() === clean);
+  }
+
+  getUserByIdentifier(identifier: string): UserInDB | undefined {
+    if (!identifier) return undefined;
+    const cleanRaw = identifier.trim();
+    const cleanLower = cleanRaw.toLowerCase();
+    const cleanPhone = normalizePhoneAndNumerals(cleanRaw).replace(/^(\+20|0020|20)/, '0');
+
+    return this.data.users.find((u) => {
+      // 1. Direct Email Match (case-insensitive & trimmed)
+      if (u.email && u.email.trim().toLowerCase() === cleanLower) {
+        return true;
+      }
+      // 2. Phone Match (handles Egyptian prefixes, spaces, and leading zeroes)
+      if (u.phone) {
+        const uPhoneNormalized = normalizePhoneAndNumerals(u.phone).replace(/^(\+20|0020|20)/, '0');
+        if (cleanPhone.length >= 8 && uPhoneNormalized.length >= 8) {
+          if (uPhoneNormalized === cleanPhone) return true;
+          // Compare last 9 digits for Egyptian mobile numbers (e.g. 100000001)
+          if (cleanPhone.slice(-9) === uPhoneNormalized.slice(-9)) return true;
+        }
+      }
+      return false;
+    });
   }
 
   getUserById(id: string): UserInDB | undefined {
@@ -876,9 +1120,15 @@ class Database {
   }
 
   updateSettings(updates: Partial<StoreSettings>, updatedBy?: UserInDB): StoreSettings {
+    const cleanUpdates: Partial<StoreSettings> = {};
+    for (const [key, val] of Object.entries(updates)) {
+      if (val !== undefined) {
+        (cleanUpdates as any)[key] = val;
+      }
+    }
     this.data.settings = {
       ...this.data.settings,
-      ...updates,
+      ...cleanUpdates,
     };
     if (updatedBy) {
       this.addAuditLog({
@@ -925,9 +1175,15 @@ class Database {
   updateCategory(id: string, updates: Partial<Category>, updatedBy?: UserInDB): Category | null {
     const idx = this.data.categories.findIndex((c) => c.id === id);
     if (idx === -1) return null;
+    const cleanUpdates: Partial<Category> = {};
+    for (const [key, val] of Object.entries(updates)) {
+      if (val !== undefined && key !== 'id') {
+        (cleanUpdates as any)[key] = val;
+      }
+    }
     this.data.categories[idx] = {
       ...this.data.categories[idx],
-      ...updates,
+      ...cleanUpdates,
     };
     if (updatedBy) {
       this.addAuditLog({
@@ -1036,18 +1292,25 @@ class Database {
     if (idx === -1) return null;
 
     const current = this.data.customizationGroups[idx];
-    const updatedOptions = updates.options !== undefined
+    const cleanUpdates: Partial<CustomizationGroup> = {};
+    for (const [key, val] of Object.entries(updates)) {
+      if (val !== undefined && key !== 'id' && key !== 'createdAt') {
+        (cleanUpdates as any)[key] = val;
+      }
+    }
+
+    const updatedOptions = Array.isArray(updates.options)
       ? updates.options.map((opt) => ({
           ...opt,
           id: opt.id || `opt_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
           priceDelta: parseFloat(Number(opt.priceDelta || 0).toFixed(2)),
           isAvailable: opt.isAvailable !== false,
         }))
-      : current.options;
+      : current.options || [];
 
     this.data.customizationGroups[idx] = {
       ...current,
-      ...updates,
+      ...cleanUpdates,
       options: updatedOptions,
       updatedAt: new Date().toISOString(),
     };
@@ -1149,11 +1412,40 @@ class Database {
   updateProduct(id: string, updates: Partial<DonutProduct>, updatedBy?: UserInDB): DonutProduct | null {
     const idx = this.data.products.findIndex((p) => p.id === id);
     if (idx === -1) return null;
+    const current = this.data.products[idx];
+
+    const cleanUpdates: Partial<DonutProduct> = {};
+    for (const [key, val] of Object.entries(updates)) {
+      if (val !== undefined && key !== 'id' && key !== 'createdAt') {
+        (cleanUpdates as any)[key] = val;
+      }
+    }
+
+    // Preserve arrays if not explicitly provided as arrays in updates
+    if (updates.options !== undefined && Array.isArray(updates.options)) {
+      cleanUpdates.options = updates.options;
+    } else if (cleanUpdates.options === undefined) {
+      cleanUpdates.options = current.options || [];
+    }
+
+    if (updates.images !== undefined && Array.isArray(updates.images)) {
+      cleanUpdates.images = updates.images;
+    } else if (cleanUpdates.images === undefined) {
+      cleanUpdates.images = current.images || [];
+    }
+
+    if (updates.customizationGroupIds !== undefined && Array.isArray(updates.customizationGroupIds)) {
+      cleanUpdates.customizationGroupIds = updates.customizationGroupIds;
+    } else if (cleanUpdates.customizationGroupIds === undefined) {
+      cleanUpdates.customizationGroupIds = current.customizationGroupIds || [];
+    }
+
     this.data.products[idx] = {
-      ...this.data.products[idx],
-      ...updates,
+      ...current,
+      ...cleanUpdates,
       updatedAt: new Date().toISOString(),
     };
+
     if (updatedBy) {
       this.addAuditLog({
         performedById: updatedBy.id,
@@ -1230,9 +1522,15 @@ class Database {
   updateDeliveryLocation(id: string, updates: Partial<DeliveryLocation>, updatedBy?: UserInDB): DeliveryLocation | null {
     const idx = this.data.deliveryLocations.findIndex((l) => l.id === id);
     if (idx === -1) return null;
+    const cleanUpdates: Partial<DeliveryLocation> = {};
+    for (const [key, val] of Object.entries(updates)) {
+      if (val !== undefined && key !== 'id') {
+        (cleanUpdates as any)[key] = val;
+      }
+    }
     this.data.deliveryLocations[idx] = {
       ...this.data.deliveryLocations[idx],
-      ...updates,
+      ...cleanUpdates,
     };
     if (updatedBy) {
       this.addAuditLog({
@@ -1366,6 +1664,50 @@ class Database {
     const validatedItems: OrderItem[] = [];
 
     for (const item of orderData.items) {
+      if (item.isOffer || item.productId.startsWith('off_')) {
+        const offer = this.getOfferById(item.productId);
+        if (!offer || !offer.isActive) {
+          return {
+            order: null as any,
+            error: `العرض المختار غير متوفر حالياً.`,
+          };
+        }
+        const now = new Date();
+        if (offer.startDate && new Date(offer.startDate) > now) {
+          return {
+            order: null as any,
+            error: `العرض المختار لم يبدأ بعد.`,
+          };
+        }
+        if (offer.endDate && new Date(offer.endDate) < now) {
+          return {
+            order: null as any,
+            error: `عذراً، انتهت صلاحية العرض المختار (${offer.nameAr}).`,
+          };
+        }
+
+        const offerPrice = Number(offer.price) || 0;
+        const offerSummary = item.offerItemsSummary || (offer.items && offer.items.map((it) => `${it.quantity}× ${it.productNameAr}`).join(' + ')) || 'عرض خاص';
+
+        subtotal += offerPrice * item.quantity;
+        validatedItems.push({
+          id: `item_off_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+          productId: offer.id,
+          productNameAr: `[عرض خاص] ${offer.nameAr}`,
+          productNameEn: offer.nameEn ? `[Special Offer] ${offer.nameEn}` : `[Special Offer] ${offer.nameAr}`,
+          imageUrl: offer.imageUrl,
+          quantity: item.quantity,
+          basePrice: offerPrice,
+          unitPrice: offerPrice,
+          selectedOption: offerSummary,
+          isOffer: true,
+          offerId: offer.id,
+          offerItemsSummary: offerSummary,
+          customNotes: item.customNotes,
+        });
+        continue;
+      }
+
       const product = this.getProductById(item.productId);
       if (!product || !product.isPublished) {
         return {
@@ -1662,14 +2004,691 @@ class Database {
     };
   }
 
-  // Reset database to completely empty state (for owner testing if desired)
-  resetToCleanState() {
-    this.data.categories = [];
-    this.data.products = [];
-    this.data.deliveryLocations = [];
-    this.data.orders = [];
-    this.data.auditLogs = [];
+  // -------------------------------------------------------------
+  // Monthly Accounting & Archiving System (Owner-Only)
+  // -------------------------------------------------------------
+
+  getAvailableAccountingMonths(): {
+    months: Array<{
+      key: string;
+      nameAr: string;
+      nameEn: string;
+      isClosed: boolean;
+      closedAt?: string;
+      orderCount: number;
+      totalSales: number;
+    }>;
+    availableMonths: string[];
+    activeMonth: string;
+    archives: MonthlyArchiveRecord[];
+  } {
+    const monthKeysSet = new Set<string>();
+
+    // Current calendar month (e.g. "2026-11")
+    const currentMonthKey = new Date().toISOString().slice(0, 7);
+    monthKeysSet.add(currentMonthKey);
+
+    // Active operational month if defined
+    if (this.data.activeAccountingMonth) {
+      monthKeysSet.add(this.data.activeAccountingMonth);
+    }
+
+    // Months from historical orders
+    for (const order of this.data.orders) {
+      if (order.createdAt && order.createdAt.length >= 7) {
+        monthKeysSet.add(order.createdAt.slice(0, 7));
+      }
+    }
+
+    // Months from archives
+    if (this.data.monthlyArchives) {
+      for (const arch of this.data.monthlyArchives) {
+        if (arch.monthKey) {
+          monthKeysSet.add(arch.monthKey);
+        }
+      }
+    }
+
+    const monthNamesAr: Record<string, string> = {
+      '01': 'يناير',
+      '02': 'فبراير',
+      '03': 'مارس',
+      '04': 'أبريل',
+      '05': 'مايو',
+      '06': 'يونيو',
+      '07': 'يوليو',
+      '08': 'أغسطس',
+      '09': 'سبتمبر',
+      '10': 'أكتوبر',
+      '11': 'نوفمبر',
+      '12': 'ديسمبر',
+    };
+
+    const monthNamesEn: Record<string, string> = {
+      '01': 'January',
+      '02': 'February',
+      '03': 'March',
+      '04': 'April',
+      '05': 'May',
+      '06': 'June',
+      '07': 'July',
+      '08': 'August',
+      '09': 'September',
+      '10': 'October',
+      '11': 'November',
+      '12': 'December',
+    };
+
+    const sortedKeys = Array.from(monthKeysSet).sort().reverse();
+    const archives = this.data.monthlyArchives || [];
+
+    const months = sortedKeys.map((key) => {
+      const [year, monthNum] = key.split('-');
+      const nameAr = `${monthNamesAr[monthNum] || monthNum} ${year}`;
+      const nameEn = `${monthNamesEn[monthNum] || monthNum} ${year}`;
+
+      const archive = archives.find((a) => a.monthKey === key);
+      const isClosed = Boolean(archive);
+
+      const monthOrders = this.data.orders.filter(
+        (o) => o.createdAt && o.createdAt.startsWith(key)
+      );
+      const delivered = monthOrders.filter((o) => o.status === 'DELIVERED');
+      const totalSales = archive
+        ? archive.summary.totalSales
+        : delivered.reduce((sum, o) => sum + o.total, 0);
+
+      return {
+        key,
+        nameAr,
+        nameEn,
+        isClosed,
+        closedAt: archive?.closedAt,
+        orderCount: monthOrders.length,
+        totalSales: parseFloat(totalSales.toFixed(2)),
+      };
+    });
+
+    const activeMonth = this.data.activeAccountingMonth || currentMonthKey;
+
+    return {
+      months,
+      availableMonths: months.map((m) => m.key),
+      activeMonth,
+      archives,
+    };
+  }
+
+  getMonthlyAccountingReport(monthKey: string): MonthlyAccountingReport {
+    const [year, monthNum] = monthKey.split('-');
+    const monthNamesAr: Record<string, string> = {
+      '01': 'يناير',
+      '02': 'فبراير',
+      '03': 'مارس',
+      '04': 'أبريل',
+      '05': 'مايو',
+      '06': 'يونيو',
+      '07': 'يوليو',
+      '08': 'أغسطس',
+      '09': 'سبتمبر',
+      '10': 'أكتوبر',
+      '11': 'نوفمبر',
+      '12': 'ديسمبر',
+    };
+    const monthNamesEn: Record<string, string> = {
+      '01': 'January',
+      '02': 'February',
+      '03': 'March',
+      '04': 'April',
+      '05': 'May',
+      '06': 'June',
+      '07': 'July',
+      '08': 'August',
+      '09': 'September',
+      '10': 'October',
+      '11': 'November',
+      '12': 'December',
+    };
+    const monthNameAr = `${monthNamesAr[monthNum] || monthNum} ${year}`;
+    const monthNameEn = `${monthNamesEn[monthNum] || monthNum} ${year}`;
+
+    // Filter orders belonging to this month
+    const monthOrders = this.data.orders
+      .filter((o) => o.createdAt && o.createdAt.startsWith(monthKey))
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+    const deliveredOrders = monthOrders.filter((o) => o.status === 'DELIVERED');
+    const cancelledOrders = monthOrders.filter(
+      (o) => o.status === 'CANCELLED' || o.status === 'NOT_RECEIVED'
+    );
+    const unpaidOrders = monthOrders.filter(
+      (o) =>
+        o.status === 'PENDING' ||
+        o.status === 'CONFIRMED' ||
+        o.status === 'PREPARING' ||
+        o.status === 'OUT_FOR_DELIVERY'
+    );
+
+    const collectedAmount = deliveredOrders.reduce((sum, o) => sum + o.total, 0);
+    const unpaidAmount = unpaidOrders.reduce((sum, o) => sum + o.total, 0);
+    const cancelledAmount = cancelledOrders.reduce((sum, o) => sum + o.total, 0);
+    const deliveryFeesCollected = deliveredOrders.reduce((sum, o) => sum + o.deliveryFee, 0);
+    const productsSalesTotal = deliveredOrders.reduce((sum, o) => sum + o.subtotal, 0);
+    const totalSales = collectedAmount;
+
+    const averageOrderValue =
+      deliveredOrders.length > 0 ? collectedAmount / deliveredOrders.length : 0;
+
+    // Check archive
+    const archive = (this.data.monthlyArchives || []).find((a) => a.monthKey === monthKey);
+
+    const summary: MonthlyAccountingSummary = {
+      monthKey,
+      monthNameAr,
+      monthNameEn,
+      totalOrders: monthOrders.length,
+      deliveredOrders: deliveredOrders.length,
+      cancelledOrders: cancelledOrders.length,
+      unpaidOrders: unpaidOrders.length,
+      totalSales: parseFloat(totalSales.toFixed(2)),
+      grossSales: parseFloat(monthOrders.reduce((sum, o) => sum + (o.total || 0), 0).toFixed(2)),
+      collectedAmount: parseFloat(collectedAmount.toFixed(2)),
+      unpaidAmount: parseFloat(unpaidAmount.toFixed(2)),
+      cancelledAmount: parseFloat(cancelledAmount.toFixed(2)),
+      deliveryFeesCollected: parseFloat(deliveryFeesCollected.toFixed(2)),
+      productsSalesTotal: parseFloat(productsSalesTotal.toFixed(2)),
+      averageOrderValue: parseFloat(averageOrderValue.toFixed(2)),
+      isClosed: Boolean(archive),
+      closedAt: archive?.closedAt,
+      closedById: archive?.closedById,
+      closedByName: archive?.closedByName,
+      closingNotes: archive?.closingNotes,
+    };
+
+    // Status breakdown
+    const statusBreakdown: Record<string, { count: number; totalAmount: number }> = {};
+    for (const ord of monthOrders) {
+      if (!statusBreakdown[ord.status]) {
+        statusBreakdown[ord.status] = { count: 0, totalAmount: 0 };
+      }
+      statusBreakdown[ord.status].count += 1;
+      statusBreakdown[ord.status].totalAmount += ord.total;
+    }
+    for (const key of Object.keys(statusBreakdown)) {
+      statusBreakdown[key].totalAmount = parseFloat(
+        statusBreakdown[key].totalAmount.toFixed(2)
+      );
+    }
+
+    // Top products
+    const productStats: Record<
+      string,
+      { nameAr: string; nameEn: string; quantity: number; revenue: number }
+    > = {};
+    for (const ord of deliveredOrders) {
+      for (const item of ord.items) {
+        if (!productStats[item.productId]) {
+          productStats[item.productId] = {
+            nameAr: item.productNameAr,
+            nameEn: item.productNameEn,
+            quantity: 0,
+            revenue: 0,
+          };
+        }
+        productStats[item.productId].quantity += item.quantity;
+        productStats[item.productId].revenue += item.quantity * item.unitPrice;
+      }
+    }
+    const topProducts = Object.entries(productStats)
+      .map(([id, stats]) => ({
+        productId: id,
+        nameAr: stats.nameAr,
+        nameEn: stats.nameEn,
+        quantity: stats.quantity,
+        revenue: parseFloat(stats.revenue.toFixed(2)),
+      }))
+      .sort((a, b) => b.quantity - a.quantity);
+
+    return {
+      summary,
+      orders: monthOrders,
+      statusBreakdown,
+      topProducts,
+      isClosed: Boolean(archive),
+      archiveRecord: archive,
+    };
+  }
+
+  closeAccountingMonth(
+    monthKey: string,
+    closingNotes: string | undefined,
+    closedBy: UserInDB
+  ): MonthlyArchiveRecord {
+    if (closedBy.role !== 'OWNER') {
+      throw new Error('فقط مالك المتجر (Owner) مصرح له بإغلاق الأشهر المحاسبية وأرشفة السجلات.');
+    }
+
+    if (!this.data.monthlyArchives) {
+      this.data.monthlyArchives = [];
+    }
+
+    const report = this.getMonthlyAccountingReport(monthKey);
+    const now = new Date().toISOString();
+
+    const archiveRecord: MonthlyArchiveRecord = {
+      id: `mclose_${monthKey.replace('-', '_')}_${Date.now()}`,
+      monthKey,
+      closedAt: now,
+      closedById: closedBy.id,
+      closedByName: closedBy.name,
+      closingNotes: closingNotes || '',
+      summary: {
+        ...report.summary,
+        isClosed: true,
+        closedAt: now,
+        closedById: closedBy.id,
+        closedByName: closedBy.name,
+        closingNotes: closingNotes || '',
+      },
+    };
+
+    // Replace if previously existed or push
+    const existingIdx = this.data.monthlyArchives.findIndex((a) => a.monthKey === monthKey);
+    if (existingIdx !== -1) {
+      this.data.monthlyArchives[existingIdx] = archiveRecord;
+    } else {
+      this.data.monthlyArchives.push(archiveRecord);
+    }
+
+    this.addAuditLog({
+      performedById: closedBy.id,
+      performedByName: closedBy.name,
+      performedByRole: 'OWNER',
+      action: `إغلاق الشهر المحاسبي: ${report.summary.monthNameAr}`,
+      details: `المبيعات الإجمالية المحصلة: ${archiveRecord.summary.totalSales} ج.م. | عدد الطلبات: ${archiveRecord.summary.totalOrders} | تم الحفظ والأرشفة الدائمة`,
+    });
+
     this.save();
+    return archiveRecord;
+  }
+
+  startNewAccountingPeriod(newMonthKey: string, startedBy: UserInDB): { activeMonth: string } {
+    if (startedBy.role !== 'OWNER') {
+      throw new Error('فقط مالك المتجر (Owner) مصرح له ببدء فترات محاسبية جديدة.');
+    }
+
+    this.data.activeAccountingMonth = newMonthKey;
+
+    this.addAuditLog({
+      performedById: startedBy.id,
+      performedByName: startedBy.name,
+      performedByRole: 'OWNER',
+      action: `بدء فترة تشغيلية محاسبية جديدة: ${newMonthKey}`,
+      details: `تم تنشيط الفترة المحاسبية الجديدة مع الحفاظ التام على كافة السجلات والطلبات التاريخية السابقة`,
+    });
+
+    this.save();
+    return { activeMonth: newMonthKey };
+  }
+
+  reopenAccountingMonth(monthKey: string, reopenedBy: UserInDB): { success: boolean; message: string } {
+    if (reopenedBy.role !== 'OWNER') {
+      throw new Error('فقط مالك المتجر (Owner) مصرح له بإعادة فتح الأشهر المحاسبية.');
+    }
+
+    if (!this.data.monthlyArchives) return { success: true, message: 'الشهر غير مغلق.' };
+
+    this.data.monthlyArchives = this.data.monthlyArchives.filter((a) => a.monthKey !== monthKey);
+
+    this.addAuditLog({
+      performedById: reopenedBy.id,
+      performedByName: reopenedBy.name,
+      performedByRole: 'OWNER',
+      action: `إعادة فتح الشهر المحاسبي: ${monthKey}`,
+      details: `تم فك أرشفة الشهر للسماح بمراجعة العمليات والتعديل الإداري`,
+    });
+
+    this.save();
+    return { success: true, message: 'تمت إعادة فتح الشهر المحاسبي بنجاح.' };
+  }
+
+  // -------------------------------------------------------------
+  // Special Offers System (Special purchasable bundled products)
+  // -------------------------------------------------------------
+
+  getOffers(onlyActive = true): SpecialOffer[] {
+    const list = this.data.offers || [];
+    if (!onlyActive) return list;
+    const now = Date.now();
+    return list
+      .filter((off) => {
+        if (off.isActive === false) return false;
+        if (off.startDate) {
+          const start = new Date(off.startDate).getTime();
+          if (!isNaN(start) && now < start) return false;
+        }
+        if (off.endDate) {
+          let end = new Date(off.endDate).getTime();
+          if (off.endDate.length === 10) {
+            end = new Date(`${off.endDate}T23:59:59.999Z`).getTime();
+          }
+          if (!isNaN(end) && now > end) return false;
+        }
+        return true;
+      })
+      .sort((a, b) => (a.displayOrder || 0) - (b.displayOrder || 0));
+  }
+
+  getAdminOffers(): SpecialOffer[] {
+    return (this.data.offers || [])
+      .slice()
+      .sort((a, b) => (a.displayOrder || 0) - (b.displayOrder || 0));
+  }
+
+  getOfferById(id: string): SpecialOffer | undefined {
+    return (this.data.offers || []).find((o) => o.id === id);
+  }
+
+  createOffer(
+    offerData: Omit<SpecialOffer, 'id' | 'createdAt' | 'updatedAt'>,
+    performedBy: UserInDB
+  ): SpecialOffer {
+    if (!Array.isArray(this.data.offers)) this.data.offers = [];
+
+    const now = new Date().toISOString();
+    const newOffer: SpecialOffer = {
+      id: `off_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      nameAr: offerData.nameAr?.trim() || 'عرض خاص',
+      nameEn: offerData.nameEn?.trim() || '',
+      descAr: offerData.descAr?.trim() || '',
+      descEn: offerData.descEn?.trim() || '',
+      imageUrl: offerData.imageUrl || '',
+      price:
+        typeof offerData.price === 'number'
+          ? offerData.price
+          : parseFloat(String(offerData.price || '0')) || 0,
+      originalPrice:
+        typeof offerData.originalPrice === 'number'
+          ? offerData.originalPrice
+          : undefined,
+      items: Array.isArray(offerData.items) ? offerData.items : [],
+      startDate: offerData.startDate || undefined,
+      endDate: offerData.endDate || undefined,
+      isActive: offerData.isActive !== false,
+      displayOrder:
+        typeof offerData.displayOrder === 'number'
+          ? offerData.displayOrder
+          : this.data.offers.length + 1,
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    this.data.offers.push(newOffer);
+
+    this.addAuditLog({
+      performedById: performedBy.id,
+      performedByName: performedBy.name,
+      performedByRole: performedBy.role,
+      action: `إنشاء عرض خاص جديد: ${newOffer.nameAr}`,
+      details: `السعر: ${newOffer.price} ج.م. | عدد الأصناف المضمنة: ${newOffer.items.length}`,
+    });
+
+    this.save();
+    return newOffer;
+  }
+
+  updateOffer(
+    id: string,
+    updates: Partial<SpecialOffer>,
+    performedBy: UserInDB
+  ): SpecialOffer {
+    if (!Array.isArray(this.data.offers)) this.data.offers = [];
+    const idx = this.data.offers.findIndex((o) => o.id === id);
+    if (idx === -1) {
+      throw new Error('العرض الخاص غير موجود.');
+    }
+
+    const existing = this.data.offers[idx];
+    const updatedOffer: SpecialOffer = {
+      ...existing,
+      ...updates,
+      id: existing.id,
+      createdAt: existing.createdAt,
+      updatedAt: new Date().toISOString(),
+    };
+
+    if (updates.price !== undefined) {
+      updatedOffer.price =
+        typeof updates.price === 'number'
+          ? updates.price
+          : parseFloat(String(updates.price || '0')) || 0;
+    }
+
+    this.data.offers[idx] = updatedOffer;
+
+    this.addAuditLog({
+      performedById: performedBy.id,
+      performedByName: performedBy.name,
+      performedByRole: performedBy.role,
+      action: `تعديل العرض الخاص: ${updatedOffer.nameAr}`,
+      details: `السعر المحدث: ${updatedOffer.price} ج.م. | الحالة: ${updatedOffer.isActive ? 'نشط' : 'معطل'}`,
+    });
+
+    this.save();
+    return updatedOffer;
+  }
+
+  deleteOffer(id: string, performedBy: UserInDB): boolean {
+    if (!Array.isArray(this.data.offers)) return false;
+    const idx = this.data.offers.findIndex((o) => o.id === id);
+    if (idx === -1) return false;
+
+    const [deleted] = this.data.offers.splice(idx, 1);
+
+    this.addAuditLog({
+      performedById: performedBy.id,
+      performedByName: performedBy.name,
+      performedByRole: performedBy.role,
+      action: `حذف العرض الخاص: ${deleted.nameAr}`,
+      details: `تم حذف العرض نهائياً من قاعدة البيانات مع الحفاظ التام على سجلات الطلبات التاريخية السابقة`,
+    });
+
+    this.save();
+    return true;
+  }
+
+  toggleOfferActive(id: string, performedBy: UserInDB): SpecialOffer {
+    const offer = this.getOfferById(id);
+    if (!offer) throw new Error('العرض الخاص غير موجود.');
+    return this.updateOffer(id, { isActive: !offer.isActive }, performedBy);
+  }
+
+  // -------------------------------------------------------------
+  // Dedicated Advertisements System
+  // -------------------------------------------------------------
+
+  getAdvertisements(onlyActive = true, placement?: AdPlacement): Advertisement[] {
+    const list = this.data.advertisements || [];
+    const now = Date.now();
+    return list
+      .filter((ad) => {
+        if (onlyActive && ad.isActive === false) return false;
+        if (placement && ad.placement !== placement) return false;
+        if (onlyActive) {
+          if (ad.startDate) {
+            const start = new Date(ad.startDate).getTime();
+            if (!isNaN(start) && now < start) return false;
+          }
+          if (ad.endDate) {
+            let end = new Date(ad.endDate).getTime();
+            if (ad.endDate.length === 10) {
+              end = new Date(`${ad.endDate}T23:59:59.999Z`).getTime();
+            }
+            if (!isNaN(end) && now > end) return false;
+          }
+        }
+        return true;
+      })
+      .sort((a, b) => (a.displayOrder || 0) - (b.displayOrder || 0));
+  }
+
+  getAdminAdvertisements(): Advertisement[] {
+    return (this.data.advertisements || [])
+      .slice()
+      .sort((a, b) => (a.displayOrder || 0) - (b.displayOrder || 0));
+  }
+
+  getAdvertisementById(id: string): Advertisement | undefined {
+    return (this.data.advertisements || []).find((a) => a.id === id);
+  }
+
+  createAdvertisement(
+    adData: Omit<Advertisement, 'id' | 'createdAt' | 'updatedAt'>,
+    performedBy: UserInDB
+  ): Advertisement {
+    if (!Array.isArray(this.data.advertisements)) this.data.advertisements = [];
+
+    const now = new Date().toISOString();
+    const images =
+      Array.isArray(adData.images) && adData.images.length > 0
+        ? adData.images
+        : adData.mainImage
+        ? [adData.mainImage]
+        : [];
+    const mainImage = adData.mainImage || (images[0] || '');
+
+    const newAd: Advertisement = {
+      id: `ad_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      titleAr: adData.titleAr?.trim() || 'إعلان ترويجي',
+      titleEn: adData.titleEn?.trim() || '',
+      descAr: adData.descAr?.trim() || '',
+      descEn: adData.descEn?.trim() || '',
+      images,
+      mainImage,
+      placement: adData.placement || 'TOP_HERO',
+      linkUrl: adData.linkUrl?.trim() || '',
+      buttonTextAr: adData.buttonTextAr?.trim() || '',
+      buttonTextEn: adData.buttonTextEn?.trim() || '',
+      startDate: adData.startDate || undefined,
+      endDate: adData.endDate || undefined,
+      isActive: adData.isActive !== false,
+      displayOrder:
+        typeof adData.displayOrder === 'number'
+          ? adData.displayOrder
+          : this.data.advertisements.length + 1,
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    this.data.advertisements.push(newAd);
+
+    this.addAuditLog({
+      performedById: performedBy.id,
+      performedByName: performedBy.name,
+      performedByRole: performedBy.role,
+      action: `إنشاء إعلان جديد: ${newAd.titleAr}`,
+      details: `الموضع: ${newAd.placement} | الصور: ${newAd.images.length}`,
+    });
+
+    this.save();
+    return newAd;
+  }
+
+  updateAdvertisement(
+    id: string,
+    updates: Partial<Advertisement>,
+    performedBy: UserInDB
+  ): Advertisement {
+    if (!Array.isArray(this.data.advertisements)) this.data.advertisements = [];
+    const idx = this.data.advertisements.findIndex((a) => a.id === id);
+    if (idx === -1) {
+      throw new Error('الإعلان غير موجود.');
+    }
+
+    const existing = this.data.advertisements[idx];
+    const updatedImages =
+      updates.images !== undefined
+        ? Array.isArray(updates.images)
+          ? updates.images
+          : []
+        : existing.images;
+    const updatedMain =
+      updates.mainImage || (updatedImages[0] || existing.mainImage || '');
+
+    const updatedAd: Advertisement = {
+      ...existing,
+      ...updates,
+      images: updatedImages,
+      mainImage: updatedMain,
+      id: existing.id,
+      createdAt: existing.createdAt,
+      updatedAt: new Date().toISOString(),
+    };
+
+    this.data.advertisements[idx] = updatedAd;
+
+    this.addAuditLog({
+      performedById: performedBy.id,
+      performedByName: performedBy.name,
+      performedByRole: performedBy.role,
+      action: `تعديل الإعلان: ${updatedAd.titleAr}`,
+      details: `الموضع: ${updatedAd.placement} | الحالة: ${updatedAd.isActive ? 'نشط' : 'معطل'}`,
+    });
+
+    this.save();
+    return updatedAd;
+  }
+
+  deleteAdvertisement(id: string, performedBy: UserInDB): boolean {
+    if (!Array.isArray(this.data.advertisements)) return false;
+    const idx = this.data.advertisements.findIndex((a) => a.id === id);
+    if (idx === -1) return false;
+
+    const [deleted] = this.data.advertisements.splice(idx, 1);
+
+    this.addAuditLog({
+      performedById: performedBy.id,
+      performedByName: performedBy.name,
+      performedByRole: performedBy.role,
+      action: `حذف الإعلان: ${deleted.titleAr}`,
+      details: `تم حذف الإعلان نهائياً من قاعدة البيانات`,
+    });
+
+    this.save();
+    return true;
+  }
+
+  toggleAdvertisementActive(id: string, performedBy: UserInDB): Advertisement {
+    const ad = this.getAdvertisementById(id);
+    if (!ad) throw new Error('الإعلان غير موجود.');
+    return this.updateAdvertisement(id, { isActive: !ad.isActive }, performedBy);
+  }
+
+  reorderAdvertisements(orderedIds: string[], performedBy: UserInDB): Advertisement[] {
+    if (!Array.isArray(this.data.advertisements) || !Array.isArray(orderedIds)) {
+      return this.getAdminAdvertisements();
+    }
+
+    orderedIds.forEach((id, index) => {
+      const ad = this.data.advertisements.find((a) => a.id === id);
+      if (ad) {
+        ad.displayOrder = index + 1;
+        ad.updatedAt = new Date().toISOString();
+      }
+    });
+
+    this.data.advertisements.sort((a, b) => a.displayOrder - b.displayOrder);
+
+    this.addAuditLog({
+      performedById: performedBy.id,
+      performedByName: performedBy.name,
+      performedByRole: performedBy.role,
+      action: 'إعادة ترتيب مواضع الإعلانات',
+      details: `تم تحديث ترتيب ${orderedIds.length} إعلان`,
+    });
+
+    this.save();
+    return this.getAdminAdvertisements();
   }
 }
 

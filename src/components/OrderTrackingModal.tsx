@@ -270,9 +270,24 @@ export const OrderTrackingModal: React.FC<OrderTrackingModalProps> = ({
                     </p>
                   </div>
                 </div>
-                <div className="pt-2 border-t border-slate-200 flex justify-between font-black text-slate-900">
-                  <span>{lang === 'ar' ? 'المبلغ المطلوب سداده للمندوب:' : 'Amount to pay on delivery:'}</span>
-                  <span className="text-pink-600 tabular-nums font-mono">{order.total} {t.currency} (كاش)</span>
+                <div className="pt-2 border-t border-slate-200 space-y-1.5 text-xs text-slate-600">
+                  <div className="flex justify-between">
+                    <span>{lang === 'ar' ? 'مجموع الأصناف:' : 'Items Subtotal:'}</span>
+                    <span className="font-bold tabular-nums text-slate-900 font-mono">{order.subtotal} {t.currency}</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="flex items-center gap-1">
+                      <span>{lang === 'ar' ? 'رسوم التوصيل:' : 'Delivery Fee:'}</span>
+                      {order.locationSummary && (
+                        <span className="text-[10px] text-slate-500 font-semibold">({order.locationSummary.split('-').pop()?.trim() || order.locationSummary})</span>
+                      )}
+                    </span>
+                    <span className="font-bold tabular-nums text-cyan-600 font-mono">{order.deliveryFee} {t.currency}</span>
+                  </div>
+                  <div className="pt-2 border-t border-slate-200 flex justify-between font-black text-slate-900 text-sm">
+                    <span>{lang === 'ar' ? 'المبلغ المطلوب سداده للمندوب:' : 'Amount to pay on delivery:'}</span>
+                    <span className="text-pink-600 tabular-nums font-mono">{order.total} {t.currency} (كاش)</span>
+                  </div>
                 </div>
               </div>
             </>

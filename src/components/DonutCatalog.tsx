@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import { Plus, Minus, Sparkles, MessageCircle, SlidersHorizontal, Info, ShoppingBag, CheckCircle2 } from 'lucide-react';
 import { Language, translations } from '../lib/i18n.ts';
 import { DonutProduct, Category, StoreSettings, CustomizationGroup, CartItem } from '../types.ts';
-import { CustomDonutBuilder } from './CustomDonutBuilder.tsx';
 
 interface DonutCatalogProps {
   lang: Language;
@@ -16,7 +15,7 @@ interface DonutCatalogProps {
   onAddToCart: (item: CartItem) => void;
 }
 
-export type StoreSectionTab = 'REGULAR_DONUTS' | 'CUSTOMIZE_DONUT' | 'DRINKS';
+export type StoreSectionTab = 'REGULAR_DONUTS' | 'DRINKS';
 
 export const DonutCatalog: React.FC<DonutCatalogProps> = ({
   lang,
@@ -31,7 +30,7 @@ export const DonutCatalog: React.FC<DonutCatalogProps> = ({
 }) => {
   const t = translations[lang];
 
-  // Main Section Tabs: Regular Donuts / Customize Your Donut / Drinks
+  // Main Section Tabs: Regular Donuts / Drinks (Customer view)
   const [activeSection, setActiveSection] = useState<StoreSectionTab>('REGULAR_DONUTS');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
 
@@ -76,24 +75,24 @@ export const DonutCatalog: React.FC<DonutCatalogProps> = ({
           </h2>
           <p className="text-xs sm:text-sm text-slate-500 mt-1">
             {lang === 'ar'
-              ? 'اركب موجة الحلاوة مع تشكيلة ويف دونتس الفاخرة أو صمم دونتك الخاصة بمكوناتك المفضلة.'
-              : 'Ride the sweet wave with our signature donuts or craft your personalized custom box.'}
+              ? 'اركب موجة الحلاوة مع تشكيلة ويف دونتس الفاخرة والمشروبات المميزة.'
+              : 'Ride the sweet wave with our signature artisanal donuts and drinks.'}
           </p>
         </div>
 
-        {/* 3 Main Sections Navigation Tabs (Strictly Separated Experiences) */}
+        {/* Customer Navigation Tabs: Donuts / Drinks */}
         <div className="flex flex-wrap items-center p-1.5 bg-slate-100 rounded-2xl border border-slate-200 shadow-xs">
           <button
             type="button"
             onClick={() => setActiveSection('REGULAR_DONUTS')}
-            className={`px-4 py-2.5 rounded-xl text-xs sm:text-sm font-black transition-all cursor-pointer flex items-center gap-2 ${
+            className={`px-5 py-2.5 rounded-xl text-xs sm:text-sm font-black transition-all cursor-pointer flex items-center gap-2 ${
               activeSection === 'REGULAR_DONUTS'
                 ? 'bg-pink-600 text-white shadow-sm'
                 : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
             }`}
           >
             <span>🍩</span>
-            <span>{lang === 'ar' ? 'الدونتس الكلاسيكية والجاهزة' : 'Regular Donuts'}</span>
+            <span>{lang === 'ar' ? 'تشكيلة الدونتس الفاخرة' : 'Artisanal Donuts'}</span>
             <span className={`text-[11px] px-1.5 py-0.2 rounded-md ${activeSection === 'REGULAR_DONUTS' ? 'bg-pink-700/80' : 'bg-slate-200 text-slate-700'}`}>
               {regularDonuts.length}
             </span>
@@ -101,21 +100,8 @@ export const DonutCatalog: React.FC<DonutCatalogProps> = ({
 
           <button
             type="button"
-            onClick={() => setActiveSection('CUSTOMIZE_DONUT')}
-            className={`px-4 py-2.5 rounded-xl text-xs sm:text-sm font-black transition-all cursor-pointer flex items-center gap-2 ${
-              activeSection === 'CUSTOMIZE_DONUT'
-                ? 'bg-gradient-to-r from-pink-600 to-cyan-600 text-white shadow-sm'
-                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
-            }`}
-          >
-            <Sparkles className="w-3.5 h-3.5" />
-            <span>{lang === 'ar' ? 'صمم دونتك بنفسك' : 'Customize Your Donut'}</span>
-          </button>
-
-          <button
-            type="button"
             onClick={() => setActiveSection('DRINKS')}
-            className={`px-4 py-2.5 rounded-xl text-xs sm:text-sm font-black transition-all cursor-pointer flex items-center gap-2 ${
+            className={`px-5 py-2.5 rounded-xl text-xs sm:text-sm font-black transition-all cursor-pointer flex items-center gap-2 ${
               activeSection === 'DRINKS'
                 ? 'bg-cyan-600 text-white shadow-sm'
                 : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
@@ -344,20 +330,8 @@ export const DonutCatalog: React.FC<DonutCatalogProps> = ({
         </div>
       )}
 
-      {/* ========================================================================= */}
-      {/* SECTION C: CUSTOMIZE YOUR OWN DONUT (Interactive Donut Studio) */}
-      {/* ========================================================================= */}
-      {activeSection === 'CUSTOMIZE_DONUT' && (
-        <CustomDonutBuilder
-          lang={lang}
-          customizationGroups={customizationGroups}
-          donutProducts={regularDonuts}
-          onAddToCart={onAddToCart}
-        />
-      )}
-
-      {/* ========================================================================= */}
-      {/* SECTION D: DRINKS (Beverages added by Owner with same ordering workflow) */}
+  {/* ========================================================================= */}
+      {/* SECTION B: DRINKS (Beverages added by Owner with same ordering workflow) */}
       {/* ========================================================================= */}
       {activeSection === 'DRINKS' && (
         <div className="space-y-6">

@@ -75,7 +75,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         onSuccess(res.user);
         onClose();
       } else if (tab === 'LOGIN') {
-        const res = await api.login({ email, password });
+        const cleanIdentifier = email.trim();
+        const res = await api.login({ email: cleanIdentifier, password });
         setToken(res.token);
         onSuccess(res.user);
         onClose();
@@ -231,16 +232,22 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
           <div>
             <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1">
-              {t.email}
+              {tab === 'LOGIN'
+                ? (lang === 'ar' ? 'البريد الإلكتروني أو رقم الهاتف المسجل' : 'Email or Registered Phone')
+                : t.email}
             </label>
             <div className="relative">
               <Mail className="w-4 h-4 text-slate-400 absolute top-3.5 right-3" />
               <input
-                type="email"
+                type={tab === 'LOGIN' ? 'text' : 'email'}
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder={isAdminTarget ? 'admin@wavedonuts.eg' : 'name@example.com'}
+                placeholder={
+                  tab === 'LOGIN'
+                    ? (lang === 'ar' ? 'owner@wavedonuts.eg أو 010xxxxxxxx' : 'owner@wavedonuts.eg or 010xxxxxxxx')
+                    : (isAdminTarget ? 'admin@wavedonuts.eg' : 'name@example.com')
+                }
                 className="w-full pr-10 pl-3 py-2.5 rounded-xl border border-slate-200 text-xs focus:outline-pink-500 font-sans"
               />
             </div>

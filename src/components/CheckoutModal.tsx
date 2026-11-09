@@ -125,11 +125,14 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
 
   const selectedAddress = addresses.find((a) => a.id === selectedAddressId);
   const matchedLocation = selectedAddress
-    ? locations.find((l) => l.id === selectedAddress.deliveryLocationId || l.area === selectedAddress.area)
-    : locations.find((l) => l.id === selectedLocationId) || locations[0];
+    ? (locations.find((l) => l.id === selectedAddress.deliveryLocationId) ||
+       locations.find((l) => l.area === selectedAddress.area && l.city === selectedAddress.city) ||
+       locations.find((l) => l.area === selectedAddress.area) ||
+       null)
+    : (locations.find((l) => l.id === selectedLocationId) || (locations.length > 0 ? locations[0] : null));
 
   const subtotal = items.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0);
-  const deliveryFee = matchedLocation ? matchedLocation.deliveryFee : 0;
+  const deliveryFee = matchedLocation ? Number(matchedLocation.deliveryFee) : 0;
   const total = subtotal + deliveryFee;
 
   const handlePlaceOrder = async () => {
@@ -156,6 +159,9 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
           selectedOption: i.selectedOption,
           selectedCustomizations: i.selectedCustomizations,
           customNotes: i.customNotes,
+          isOffer: i.isOffer,
+          offerId: i.offerId,
+          offerItemsSummary: i.offerItemsSummary,
         })),
       };
 
@@ -412,6 +418,9 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                   <div className="space-y-2">
                     {addresses.map((addr) => {
                       const isSelected = selectedAddressId === addr.id;
+                      const addrLoc = locations.find((l) => l.id === addr.deliveryLocationId) ||
+                        locations.find((l) => l.area === addr.area && l.city === addr.city) ||
+                        locations.find((l) => l.area === addr.area);
                       return (
                         <div
                           key={addr.id}
@@ -423,11 +432,16 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                           }`}
                         >
                           <div>
-                            <div className="flex items-center gap-2">
+                            <div className="flex flex-wrap items-center gap-2">
                               <span className="font-bold text-xs text-slate-900">{addr.title}</span>
-                              <span className="text-[10px] font-semibold text-cyan-600 bg-cyan-50 px-2 py-0.5 rounded-md">
+                              <span className="text-[10px] font-semibold text-cyan-700 bg-cyan-50 px-2 py-0.5 rounded-md">
                                 {addr.governorate} - {addr.city} ({addr.area})
                               </span>
+                              {addrLoc && (
+                                <span className="text-[10px] font-bold text-pink-600 bg-pink-50 px-2 py-0.5 rounded-md">
+                                  {addrLoc.deliveryFee} {t.currency} توصيل
+                                </span>
+                              )}
                             </div>
                             <p className="text-xs text-slate-500 mt-0.5">
                               شارع {addr.street} · عمارة {addr.buildingNumber}
@@ -436,7 +450,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                             </p>
                           </div>
                           <div
-                            className={`w-5 h-5 rounded-full border flex items-center justify-center ${
+                            className={`w-5 h-5 rounded-full border flex items-center justify-center shrink-0 ${
                               isSelected ? 'border-pink-600 bg-pink-600 text-white' : 'border-slate-300'
                             }`}
                           >
@@ -483,10 +497,15 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                   <span>{t.subtotal} ({items.length} {lang === 'ar' ? 'أصناف' : 'items'})</span>
                   <span className="font-bold tabular-nums text-slate-900 font-mono">{subtotal} {t.currency}</span>
                 </div>
-                <div className="flex justify-between text-slate-600">
-                  <span>{t.deliveryFee}</span>
+                <div className="flex justify-between items-center text-slate-600">
+                  <span className="flex items-center gap-1">
+                    <span>{t.deliveryFee}</span>
+                    {matchedLocation && (
+                      <span className="text-[10px] text-slate-500 font-semibold">({matchedLocation.area})</span>
+                    )}
+                  </span>
                   <span className="font-bold tabular-nums text-cyan-600 font-mono">
-                    {deliveryFee > 0 ? `${deliveryFee} ${t.currency}` : (lang === 'ar' ? 'حدد المنطقة' : 'Select area')}
+                    {matchedLocation ? `${deliveryFee} ${t.currency}` : (lang === 'ar' ? 'حدد عنوان التوصيل' : 'Select address')}
                   </span>
                 </div>
                 <div className="flex justify-between text-base font-black text-slate-900 pt-2 border-t border-pink-100">

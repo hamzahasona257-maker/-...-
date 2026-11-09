@@ -35,6 +35,15 @@ import {
   Key,
   Lock,
   Sparkles,
+  Calendar,
+  DollarSign,
+  Download,
+  Printer,
+  Archive,
+  FolderPlus,
+  Unlock,
+  Tag,
+  Megaphone,
 } from 'lucide-react';
 import { Language, translations } from '../lib/i18n.ts';
 import {
@@ -52,8 +61,16 @@ import {
   CustomizationGroup,
   CustomizationOption,
   CustomizationFieldType,
+  ProductOption,
+  CartItem,
+  MonthlyAccountingSummary,
+  MonthlyAccountingReport,
+  MonthlyArchiveRecord,
 } from '../types.ts';
 import { api } from '../lib/api.ts';
+import { CustomDonutBuilder } from './CustomDonutBuilder.tsx';
+import { AdminOffersManager } from './AdminOffersManager.tsx';
+import { AdminAdvertisementsManager } from './AdminAdvertisementsManager.tsx';
 
 export function normalizeSearchText(val: string): string {
   if (!val) return '';
@@ -72,6 +89,17 @@ export function normalizeSearchText(val: string): string {
     .trim();
 }
 
+export function getNextMonthKey(currentKey: string): string {
+  if (!currentKey || !/^\d{4}-\d{2}$/.test(currentKey)) {
+    const now = new Date();
+    const next = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+    return `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, '0')}`;
+  }
+  const [y, m] = currentKey.split('-').map(Number);
+  const nextDate = new Date(y, m, 1);
+  return `${nextDate.getFullYear()}-${String(nextDate.getMonth() + 1).padStart(2, '0')}`;
+}
+
 interface AdminDashboardProps {
   lang: Language;
   onExitAdmin: () => void;
@@ -80,6 +108,7 @@ interface AdminDashboardProps {
   deliveryLocations: DeliveryLocation[];
   onReloadProducts: () => void;
   onReloadLocations: () => void;
+  onUpdateSettings?: (updated: StoreSettings) => void;
   currentUser?: UserProfile | null;
 }
 
@@ -91,6 +120,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   deliveryLocations,
   onReloadProducts,
   onReloadLocations,
+  onUpdateSettings,
   currentUser,
 }) => {
   const t = translations[lang];
@@ -98,6 +128,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   type TabType =
     | 'PRODUCTS'
+    | 'OFFERS'
+    | 'ADVERTISEMENTS'
     | 'ORDERS'
     | 'DELIVERY'
     | 'CUSTOMIZATION'
@@ -105,7 +137,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     | 'CUSTOMERS'
     | 'ADMINS'
     | 'AUDIT_LOGS'
-    | 'STATS';
+    | 'STATS'
+    | 'ACCOUNTING';
 
   const [activeTab, setActiveTab] = useState<TabType>(() => {
     try {
@@ -147,6 +180,31 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   // Customer search & filter
   const [customerSearch, setCustomerSearch] = useState('');
+
+  // Order search state
+  const [orderSearch, setOrderSearch] = useState('');
+
+  // Audit log search & role filter
+  const [auditLogSearch, setAuditLogSearch] = useState('');
+  const [auditRoleFilter, setAuditRoleFilter] = useState<'ALL' | 'OWNER' | 'ADMIN'>('ALL');
+
+  // Monthly Accounting state (Owner-Only)
+  const [accountingMonths, setAccountingMonths] = useState<string[]>([]);
+  const [activeAccountingMonthKey, setActiveAccountingMonthKey] = useState<string>('');
+  const [accountingArchives, setAccountingArchives] = useState<MonthlyArchiveRecord[]>([]);
+  const [selectedMonthKey, setSelectedMonthKey] = useState<string>('');
+  const [accountingReport, setAccountingReport] = useState<MonthlyAccountingReport | null>(null);
+  const [loadingAccounting, setLoadingAccounting] = useState<boolean>(false);
+  const [showCloseMonthModal, setShowCloseMonthModal] = useState<boolean>(false);
+  const [closeMonthNotes, setCloseMonthNotes] = useState<string>('');
+  const [showNewPeriodModal, setShowNewPeriodModal] = useState<boolean>(false);
+  const [newPeriodMonthInput, setNewPeriodMonthInput] = useState<string>('');
+  const [newPeriodNotes, setNewPeriodNotes] = useState<string>('');
+  const [closingOrStartingPeriod, setClosingOrStartingPeriod] = useState<boolean>(false);
+
+  // Owner custom donut studio tester
+  const [showOwnerCustomDonutTester, setShowOwnerCustomDonutTester] = useState<boolean>(false);
+  const [testedCustomDonuts, setTestedCustomDonuts] = useState<CartItem[]>([]);
 
   // Product modal state
   const [editingProduct, setEditingProduct] = useState<Partial<DonutProduct> | null>(null);
@@ -204,6 +262,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     canManageDelivery: false,
     canManageSettings: false,
     canManageCustomers: false,
+    canManageOffers: true,
+    canManageAdvertisements: false,
   });
 
   // Owner Profile Edit State
@@ -229,19 +289,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   // Dedicated In-App Confirmation Modal (Bypasses iframe blocked window.confirm)
   const [confirmModal, setConfirmModal] = useState<{
-    isOpen: boolean;
+    isOpen?: boolean;
     title: string;
     itemName?: string;
-    warningText: string;
+    warningText?: string;
+    message?: string;
     confirmButtonText?: string;
     isDangerous?: boolean;
-    onConfirm: () => Promise<void>;
-  }>({
-    isOpen: false,
-    title: '',
-    warningText: '',
-    onConfirm: async () => {},
-  });
+    onConfirm: () => Promise<void> | void;
+  } | null>(null);
   const [confirmModalLoading, setConfirmModalLoading] = useState(false);
 
   const handleUpdateOwnerProfile = async (e: React.FormEvent) => {
@@ -266,26 +322,196 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     }
   };
 
-  const handleResetOwnerSlot = () => {
+  const loadAccountingData = async (targetMonth?: string) => {
+    if (!isOwner) return;
+    try {
+      setLoadingAccounting(true);
+      const monthsRes = await api.getAccountingMonths();
+      const avail = monthsRes.availableMonths || [];
+      const active = monthsRes.activeMonth || '';
+      setAccountingMonths(avail);
+      setActiveAccountingMonthKey(active);
+      setAccountingArchives(monthsRes.archives || []);
+
+      const monthToFetch = targetMonth || selectedMonthKey || active || avail[0] || new Date().toISOString().slice(0, 7);
+      setSelectedMonthKey(monthToFetch);
+
+      const reportRes = await api.getAccountingReport(monthToFetch);
+      setAccountingReport(reportRes.report);
+    } catch (err: any) {
+      console.error('Failed to load accounting data:', err);
+      showError(err.message || 'فشل تحميل بيانات المحاسبة الشهرية');
+    } finally {
+      setLoadingAccounting(false);
+    }
+  };
+
+  const handleSelectAccountingMonth = async (monthKey: string) => {
+    setSelectedMonthKey(monthKey);
+    try {
+      setLoadingAccounting(true);
+      const reportRes = await api.getAccountingReport(monthKey);
+      setAccountingReport(reportRes.report);
+    } catch (err: any) {
+      showError(err.message || 'فشل تحميل تقرير الشهر المحدد');
+    } finally {
+      setLoadingAccounting(false);
+    }
+  };
+
+  const handleCloseMonth = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedMonthKey) return;
+    try {
+      setClosingOrStartingPeriod(true);
+      await api.closeAccountingMonth(selectedMonthKey, { notes: closeMonthNotes });
+      showSuccess(lang === 'ar' ? `تم إغلاق وأرشفة شهر ${selectedMonthKey} بنجاح` : `Month ${selectedMonthKey} closed and archived`);
+      setShowCloseMonthModal(false);
+      setCloseMonthNotes('');
+      await loadAccountingData(selectedMonthKey);
+      await fetchData();
+    } catch (err: any) {
+      showError(err.message || 'فشل إغلاق الشهر المحاسبي');
+    } finally {
+      setClosingOrStartingPeriod(false);
+    }
+  };
+
+  const handleStartNewPeriod = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newPeriodMonthInput.trim()) return;
+    try {
+      setClosingOrStartingPeriod(true);
+      await api.startNewAccountingPeriod({ monthKey: newPeriodMonthInput.trim(), notes: newPeriodNotes });
+      showSuccess(lang === 'ar' ? `تم بدء الفترة المحاسبية الجديدة ${newPeriodMonthInput} بنجاح` : `New accounting period ${newPeriodMonthInput} started`);
+      setShowNewPeriodModal(false);
+      const newMonth = newPeriodMonthInput.trim();
+      setNewPeriodMonthInput('');
+      setNewPeriodNotes('');
+      await loadAccountingData(newMonth);
+      await fetchData();
+    } catch (err: any) {
+      showError(err.message || 'فشل بدء الفترة المحاسبية');
+    } finally {
+      setClosingOrStartingPeriod(false);
+    }
+  };
+
+  const handleReopenMonth = (monthKey: string) => {
     setConfirmModal({
       isOpen: true,
-      title: lang === 'ar' ? 'تفريغ خانة مالك المتجر' : 'Reset Owner Slot',
-      warningText:
-        lang === 'ar'
-          ? 'تحذير أمني: هل أنت متأكد من تفريغ خانة مالك المتجر؟\nسيتم تسجيل خروجك فوراً وفتح شاشة تسجيل المالك الأول مجدداً لتسجيل حسابك من البداية.'
-          : 'Are you sure you want to release the Owner slot? You will be logged out immediately and first-time registration will be reopened.',
-      isDangerous: true,
-      confirmButtonText: lang === 'ar' ? 'تأكيد تفريغ خانة المالك' : 'Confirm Reset',
+      title: lang === 'ar' ? 'إعادة فتح الشهر المحاسبي' : 'Reopen Accounting Month',
+      itemName: monthKey,
+      warningText: lang === 'ar'
+        ? `هل أنت متأكد من إعادة فتح الفترة المحاسبية لشهر ${monthKey}؟ سيتمكن النظام من تعديل وإضافة السجلات لهذا الشهر.`
+        : `Reopen accounting period for ${monthKey}?`,
+      confirmButtonText: lang === 'ar' ? 'نعم، أعد فتح الشهر' : 'Yes, Reopen',
       onConfirm: async () => {
         try {
-          await api.resetOwnerSlot();
-          localStorage.removeItem('wave_token');
-          window.location.reload();
+          await api.reopenAccountingMonth(monthKey);
+          showSuccess(lang === 'ar' ? `تمت إعادة فتح شهر ${monthKey} بنجاح` : `Month ${monthKey} reopened`);
+          await loadAccountingData(monthKey);
+          await fetchData();
         } catch (err: any) {
-          showError(err.message || 'فشل تفريغ خانة المالك');
+          showError(err.message || 'فشل إعادة فتح الشهر');
         }
       },
     });
+  };
+
+  const handleExportCSV = () => {
+    if (!accountingReport) return;
+    const summary = accountingReport.summary;
+    const rows: string[][] = [
+      ['Wave Donuts Egypt - تقرير المحاسبة والمبيعات الشهري المعتمد'],
+      ['الفترة المحاسبية', summary.monthKey, summary.monthNameAr],
+      ['حالة الإغلاق', accountingReport.isClosed ? 'مغلق ومؤرشف' : 'فترة نشطة'],
+      [],
+      ['المؤشر المالي', 'القيمة'],
+      ['إجمالي عدد الطلبات', String(summary.totalOrders)],
+      ['الطلبات المسلمة والناجحة', String(summary.deliveredOrders)],
+      ['الطلبات الملغاة أو المرفوضة', String(summary.cancelledOrders)],
+      ['الطلبات قيد التوصيل والتحصيل', String(summary.unpaidOrders)],
+      ['إجمالي المبيعات المحصلة نقداً (ج.م.)', summary.collectedAmount.toFixed(2)],
+      ['إجمالي المبيعات المسجلة (ج.م.)', summary.grossSales.toFixed(2)],
+      ['مبيعات قيد التوصيل والتحصيل (ج.م.)', summary.unpaidAmount.toFixed(2)],
+      ['قيمة الطلبات الملغاة (ج.م.)', summary.cancelledAmount.toFixed(2)],
+      ['رسوم التوصيل المحصلة (ج.م.)', summary.deliveryFeesCollected.toFixed(2)],
+      ['صافي مبيعات المنتجات (ج.م.)', summary.productsSalesTotal.toFixed(2)],
+      ['متوسط قيمة الطلب (ج.م.)', summary.averageOrderValue.toFixed(2)],
+      [],
+      ['سجل تفاصيل طلبات الشهر:'],
+      [
+        'رقم الطلب',
+        'تاريخ ووقت الطلب',
+        'اسم العميل',
+        'رقم الهاتف',
+        'المحافظة',
+        'المدينة',
+        'المنطقة',
+        'العنوان بالتفصيل',
+        'قيمة المنتجات (ج.م.)',
+        'رسوم التوصيل (ج.م.)',
+        'إجمالي الطلب (ج.م.)',
+        'طريقة الدفع',
+        'حالة الطلب',
+        'سبب الإلغاء (إن وجد)',
+        'تفاصيل المنتجات المختارة',
+      ],
+    ];
+
+    accountingReport.orders.forEach((o) => {
+      const itemsSummary = o.items
+        .map((it) => `${it.product?.nameAr || it.productNameAr} x${it.quantity} (${(it.unitPrice * it.quantity).toFixed(2)} ج.م.)`)
+        .join(' + ');
+      const addr = o.addressDetails;
+      const fullAddr = `${addr.governorate} - ${addr.city} - ${addr.area} - ش ${addr.street} - عمارة ${addr.buildingNumber}`;
+      rows.push([
+        String(o.orderNumber),
+        new Date(o.createdAt).toLocaleString('ar-EG'),
+        o.customerName,
+        o.customerPhone,
+        addr.governorate,
+        addr.city,
+        addr.area,
+        fullAddr,
+        String(o.subtotal.toFixed(2)),
+        String(o.deliveryFee.toFixed(2)),
+        String(o.total.toFixed(2)),
+        'الدفع عند الاستلام (COD)',
+        t.status[o.status] || o.status,
+        o.cancellationReason || '',
+        itemsSummary,
+      ]);
+    });
+
+    const csvContent =
+      '\uFEFF' +
+      rows
+        .map((r) =>
+          r
+            .map((cell) => {
+              const str = (cell ?? '').toString().replace(/"/g, '""');
+              return `"${str}"`;
+            })
+            .join(',')
+        )
+        .join('\r\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `wave_donuts_accounting_${summary.monthKey}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    showSuccess(lang === 'ar' ? 'تم تصدير ملف الإكسل بنجاح' : 'CSV exported successfully');
+  };
+
+  const handlePrintReport = () => {
+    window.print();
   };
 
   useEffect(() => {
@@ -310,14 +536,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         locRes,
         settingsRes,
       ] = await Promise.all([
-        api.getAdminOrders().catch(() => ({ orders: [] })),
+        api.getAdminOrders().catch(() => null),
         api.getAdminStats().catch(() => null),
-        api.getAdminCustomers().catch(() => ({ customers: [] })),
-        api.getAdminCustomizationGroups().catch(() => ({ groups: [] })),
-        api.getAdminProducts().catch(() => ({ products: [] })),
-        api.getAdminCategories().catch(() => ({ categories: [] })),
-        api.getAdminDeliveryLocations().catch(() => ({ locations: [] })),
-        api.getSettings().catch(() => ({ settings: null })),
+        api.getAdminCustomers().catch(() => null),
+        api.getAdminCustomizationGroups().catch(() => null),
+        api.getAdminProducts().catch(() => null),
+        api.getAdminCategories().catch(() => null),
+        api.getAdminDeliveryLocations().catch(() => null),
+        api.getSettings().catch(() => null),
       ]);
 
       // Protect against out-of-order race conditions: ignore if superseded by newer request
@@ -325,24 +551,24 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         return;
       }
 
-      if (ordersRes && ordersRes.orders) setOrders(ordersRes.orders);
+      if (ordersRes && Array.isArray(ordersRes.orders)) setOrders(ordersRes.orders);
       if (statsRes) setStats(statsRes);
-      if (custRes && custRes.customers) setCustomers(custRes.customers);
-      if (groupsRes && groupsRes.groups) setCustomizationGroups(groupsRes.groups);
-      if (prodRes && prodRes.products) setAdminProducts(prodRes.products);
-      if (catRes && catRes.categories) setAdminCategories(catRes.categories);
-      if (locRes && locRes.locations) setAdminLocations(locRes.locations);
-      if (settingsRes && settingsRes.settings) setSettings(settingsRes.settings);
+      if (custRes && Array.isArray(custRes.customers)) setCustomers(custRes.customers);
+      if (groupsRes && Array.isArray(groupsRes.groups)) setCustomizationGroups(groupsRes.groups);
+      if (prodRes && Array.isArray(prodRes.products)) setAdminProducts(prodRes.products);
+      if (catRes && Array.isArray(catRes.categories)) setAdminCategories(catRes.categories);
+      if (locRes && Array.isArray(locRes.locations)) setAdminLocations(locRes.locations);
+      if (settingsRes && settingsRes.settings && typeof settingsRes.settings === 'object') setSettings(settingsRes.settings);
 
       if (isOwner) {
-        const adminsRes = await api.getAdministrators().catch(() => ({ admins: [] }));
-        if (currentReqId === fetchRequestIdRef.current && adminsRes && adminsRes.admins) {
+        const adminsRes = await api.getAdministrators().catch(() => null);
+        if (currentReqId === fetchRequestIdRef.current && adminsRes && Array.isArray(adminsRes.admins)) {
           setAdministrators(adminsRes.admins);
         }
       }
 
-      const logsRes = await api.getAuditLogs().catch(() => ({ logs: [] }));
-      if (currentReqId === fetchRequestIdRef.current && logsRes && logsRes.logs) {
+      const logsRes = await api.getAuditLogs().catch(() => null);
+      if (currentReqId === fetchRequestIdRef.current && logsRes && Array.isArray(logsRes.logs)) {
         setAuditLogs(logsRes.logs);
       }
 
@@ -692,19 +918,48 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     e.preventDefault();
     if (!editingLocation) return;
     try {
-      setLoading(true);
-      const deliveryFee = typeof editingLocation.deliveryFee === 'number'
-        ? editingLocation.deliveryFee
-        : parseFloat(String(editingLocation.deliveryFee || '0')) || 0;
-      const minOrder = editingLocation.minOrder !== undefined && editingLocation.minOrder !== null && String(editingLocation.minOrder) !== ''
+      const gov = (editingLocation.governorate || '').trim();
+      const city = (editingLocation.city || '').trim();
+      const area = (editingLocation.area || '').trim();
+
+      if (!gov) {
+        showError(lang === 'ar' ? 'يرجى إدخال اسم المحافظة.' : 'Please enter governorate.');
+        return;
+      }
+      if (!city) {
+        showError(lang === 'ar' ? 'يرجى إدخال اسم المدينة / المركز.' : 'Please enter city.');
+        return;
+      }
+      if (!area) {
+        showError(lang === 'ar' ? 'يرجى إدخال اسم المنطقة أو الحي المحدد.' : 'Please enter delivery area.');
+        return;
+      }
+
+      const feeStr = String(editingLocation.deliveryFee ?? '').trim();
+      if (feeStr === '') {
+        showError(lang === 'ar' ? 'يرجى إدخال رسوم التوصيل لهذه المنطقة بالجنيه المصري (ج.م.).' : 'Please enter delivery fee in EGP.');
+        return;
+      }
+
+      const deliveryFee = parseFloat(feeStr);
+      if (isNaN(deliveryFee) || deliveryFee < 0) {
+        showError(lang === 'ar' ? 'رسوم التوصيل يجب أن تكون قيمة رقمية موجبة أو صفر.' : 'Delivery fee must be a valid non-negative number.');
+        return;
+      }
+
+      const minOrder = editingLocation.minOrder !== undefined && editingLocation.minOrder !== null && String(editingLocation.minOrder).trim() !== ''
         ? parseFloat(String(editingLocation.minOrder)) || 0
         : 0;
-      const estimatedMin = editingLocation.estimatedMin !== undefined && editingLocation.estimatedMin !== null && String(editingLocation.estimatedMin) !== ''
+      const estimatedMin = editingLocation.estimatedMin !== undefined && editingLocation.estimatedMin !== null && String(editingLocation.estimatedMin).trim() !== ''
         ? parseInt(String(editingLocation.estimatedMin), 10) || 45
         : 45;
 
+      setLoading(true);
       const payload = {
         ...editingLocation,
+        governorate: gov,
+        city,
+        area,
         deliveryFee,
         minOrder,
         estimatedMin,
@@ -712,10 +967,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
       if (isNewLocation) {
         await api.createDeliveryLocation(payload);
-        showSuccess(lang === 'ar' ? 'تمت إضافة منطقة التوصيل بنجاح!' : 'Delivery area added!');
+        showSuccess(lang === 'ar' ? `تمت إضافة منطقة (${area}) ورسوم توصيلها (${deliveryFee} ج.م.) بنجاح!` : 'Delivery area and fee added successfully!');
       } else {
         await api.updateDeliveryLocation(payload.id!, payload);
-        showSuccess(lang === 'ar' ? 'تم تحديث منطقة التوصيل!' : 'Delivery area updated!');
+        showSuccess(lang === 'ar' ? `تم تحديث رسوم وبيانات منطقة (${area}) إلى (${deliveryFee} ج.م.) بنجاح!` : 'Delivery area and fee updated successfully!');
       }
       setEditingLocation(null);
       await fetchData();
@@ -777,6 +1032,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           };
           await api.updateSettings(updated);
           setSettings(updated);
+          if (onUpdateSettings) onUpdateSettings(updated);
+          onReloadProducts();
           showSuccess(lang === 'ar' ? 'تم مسح الإعلان بنجاح' : 'Announcement cleared');
         } catch (err: any) {
           showError(err.message || 'فشل مسح الإعلان');
@@ -792,10 +1049,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     if (!settings) return;
     try {
       setLoading(true);
-      await api.updateSettings(settings);
+      const res = await api.updateSettings(settings);
+      const updated = res.settings || settings;
+      setSettings(updated);
+      if (onUpdateSettings) onUpdateSettings(updated);
+      onReloadProducts();
       showSuccess(lang === 'ar' ? 'تم حفظ إعدادات المتجر وبيانات التواصل بنجاح!' : 'Settings saved successfully!');
     } catch (err: any) {
-      alert(err.message || 'فشل حفظ الإعدادات');
+      showError(err.message || 'فشل حفظ الإعدادات');
     } finally {
       setLoading(false);
     }
@@ -986,6 +1247,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       canManageDelivery: false,
       canManageSettings: false,
       canManageCustomers: false,
+      canManageOffers: true,
+      canManageAdvertisements: false,
     });
     setShowAdminModal(true);
   };
@@ -1003,6 +1266,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         canManageDelivery: false,
         canManageSettings: false,
         canManageCustomers: false,
+        canManageOffers: false,
+        canManageAdvertisements: false,
       }
     );
     setShowAdminModal(true);
@@ -1079,9 +1344,33 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     });
   };
 
-  const filteredOrders = filterStatus === 'ALL'
-    ? orders
-    : orders.filter((o) => o.status === filterStatus);
+  const filteredOrders = orders.filter((o) => {
+    if (filterStatus !== 'ALL' && o.status !== filterStatus) return false;
+    if (!orderSearch.trim()) return true;
+    const q = normalizeSearchText(orderSearch);
+    const cleanNum = q.replace(/[^0-9]/g, '');
+    const numMatch =
+      cleanNum.length > 0 &&
+      (normalizeSearchText(String(o.orderNumber)).includes(cleanNum) ||
+        normalizeSearchText(o.customerPhone || '').replace(/[^0-9]/g, '').includes(cleanNum));
+    const nameMatch = normalizeSearchText(o.customerName || '').includes(q);
+    const areaMatch =
+      normalizeSearchText(o.addressDetails?.area || '').includes(q) ||
+      normalizeSearchText(o.addressDetails?.city || '').includes(q) ||
+      normalizeSearchText(o.addressDetails?.governorate || '').includes(q);
+    return numMatch || nameMatch || areaMatch;
+  });
+
+  const filteredAuditLogs = auditLogs.filter((log) => {
+    if (auditRoleFilter !== 'ALL' && log.performedByRole !== auditRoleFilter) return false;
+    if (!auditLogSearch.trim()) return true;
+    const q = normalizeSearchText(auditLogSearch);
+    return (
+      normalizeSearchText(log.performedByName).includes(q) ||
+      normalizeSearchText(log.action).includes(q) ||
+      normalizeSearchText(log.details || '').includes(q)
+    );
+  });
 
   const filteredCustomers = customers.filter((c) => {
     if (!customerSearch.trim()) return true;
@@ -1149,6 +1438,30 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             >
               <Package className="w-4 h-4" />
               <span>{lang === 'ar' ? 'إدارة الدونتس' : 'Donut Products'} ({adminProducts.length})</span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('OFFERS')}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-xs font-bold transition cursor-pointer ${
+                activeTab === 'OFFERS'
+                  ? 'bg-gradient-to-l from-amber-500 to-orange-500 text-white shadow-md'
+                  : 'text-amber-400 hover:text-amber-300 hover:bg-slate-800'
+              }`}
+            >
+              <Tag className="w-4 h-4 text-amber-400" />
+              <span>{lang === 'ar' ? 'العروض الخاصة والبوكسات' : 'Special Offers'}</span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('ADVERTISEMENTS')}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-xs font-bold transition cursor-pointer ${
+                activeTab === 'ADVERTISEMENTS'
+                  ? 'bg-gradient-to-l from-pink-600 to-rose-500 text-white shadow-md'
+                  : 'text-rose-400 hover:text-rose-300 hover:bg-slate-800'
+              }`}
+            >
+              <Megaphone className="w-4 h-4 text-rose-400" />
+              <span>{lang === 'ar' ? 'الإعلانات والبانرات' : 'Advertisements'}</span>
             </button>
 
             <button
@@ -1224,6 +1537,24 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               </button>
             )}
 
+            {/* Owner-Only Tab: Monthly Accounting */}
+            {isOwner && (
+              <button
+                onClick={() => {
+                  setActiveTab('ACCOUNTING');
+                  loadAccountingData();
+                }}
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-xs font-bold transition cursor-pointer ${
+                  activeTab === 'ACCOUNTING'
+                    ? 'bg-gradient-to-l from-emerald-600 to-emerald-500 text-white shadow-md'
+                    : 'text-emerald-400 hover:text-emerald-300 hover:bg-slate-800'
+                }`}
+              >
+                <DollarSign className="w-4 h-4 text-emerald-400" />
+                <span>{lang === 'ar' ? 'المحاسبة والأرشيف الشهري' : 'Monthly Accounting'}</span>
+              </button>
+            )}
+
             <button
               onClick={() => setActiveTab('AUDIT_LOGS')}
               className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-xs font-bold transition cursor-pointer ${
@@ -1283,10 +1614,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           <div>
             <h1 className="text-2xl font-black text-white">
               {activeTab === 'PRODUCTS' && (lang === 'ar' ? 'إدارة تشكيلة الدونتس والصور' : 'Donut Catalog & Photo Uploads')}
+              {activeTab === 'OFFERS' && (lang === 'ar' ? 'إدارة العروض الخاصة وبوكسات التوفير' : 'Special Bundle Offers & Deals')}
+              {activeTab === 'ADVERTISEMENTS' && (lang === 'ar' ? 'إدارة الإعلانات، البانرات والنوافذ المنبثقة' : 'Storefront Ads & Promotional Banners')}
               {activeTab === 'ORDERS' && (lang === 'ar' ? 'متابعة وتحديث الطلبات المباشرة' : 'Live Incoming Orders')}
               {activeTab === 'DELIVERY' && (lang === 'ar' ? 'إدارة المحافظات ومناطق ورسوم التوصيل' : 'Egyptian Delivery Locations & Fees')}
               {activeTab === 'CUSTOMERS' && (lang === 'ar' ? 'إدارة العملاء، سجل الحظر، والملاحظات' : 'Customer Management & Phone Blocking')}
               {activeTab === 'ADMINS' && (lang === 'ar' ? 'إدارة حسابات المشرفين وتعيين الصلاحيات' : 'Administrator Management & Role Permissions')}
+              {activeTab === 'ACCOUNTING' && (lang === 'ar' ? 'المحاسبة الشهرية، الأرشيف والتقارير المعتمدة' : 'Monthly Accounting, Archiving & Certified Reports')}
               {activeTab === 'AUDIT_LOGS' && (lang === 'ar' ? 'سجل العمليات والنشاط الإداري' : 'Administrative Audit Trail')}
               {activeTab === 'SETTINGS' && (lang === 'ar' ? 'بيانات المتجر والواتساب وإعلانات الصفحة' : 'Business Info, WhatsApp & Announcements')}
               {activeTab === 'STATS' && (lang === 'ar' ? 'إحصائيات المبيعات والأرباح' : 'Sales & Revenue Analytics')}
@@ -1513,9 +1847,56 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           </div>
         )}
 
+        {/* ---------------- 1b. Special Offers & Bundle Management ---------------- */}
+        {activeTab === 'OFFERS' && (
+          <AdminOffersManager
+            lang={lang}
+            products={adminProducts}
+            onOffersUpdated={onReloadProducts}
+            showSuccess={showSuccess}
+            showError={showError}
+          />
+        )}
+
+        {/* ---------------- 1c. Advertisements & Banner Campaigns ---------------- */}
+        {activeTab === 'ADVERTISEMENTS' && (
+          <AdminAdvertisementsManager
+            lang={lang}
+            onAdsUpdated={onReloadProducts}
+            showSuccess={showSuccess}
+            showError={showError}
+          />
+        )}
+
         {/* ---------------- 2. Live Order Intake & Status Dispatch ---------------- */}
         {activeTab === 'ORDERS' && (
           <div className="space-y-6">
+            {/* Search Bar for Orders */}
+            <div className="flex flex-col sm:flex-row gap-3">
+              <div className="relative flex-1">
+                <Search className="w-4 h-4 absolute top-1/2 -translate-y-1/2 right-3 text-slate-400" />
+                <input
+                  type="text"
+                  value={orderSearch}
+                  onChange={(e) => setOrderSearch(e.target.value)}
+                  placeholder={
+                    lang === 'ar'
+                      ? 'بحث في الطلبات برقم الطلب (مثال: 101)، اسم العميل، رقم الهاتف، أو المنطقة...'
+                      : 'Search orders by #, customer name, phone, or delivery area...'
+                  }
+                  className="w-full pl-4 pr-10 py-3 rounded-2xl bg-slate-900 border border-slate-800 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500"
+                />
+                {orderSearch && (
+                  <button
+                    onClick={() => setOrderSearch('')}
+                    className="absolute top-1/2 -translate-y-1/2 left-3 text-slate-500 hover:text-white text-xs cursor-pointer"
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+            </div>
+
             <div className="flex flex-wrap items-center gap-2">
               {['ALL', 'PENDING', 'CONFIRMED', 'PREPARING', 'OUT_FOR_DELIVERY', 'DELIVERED', 'CANCELLED', 'NOT_RECEIVED'].map((st) => (
                 <button
@@ -1631,6 +2012,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         <div className="text-xl font-black text-white tabular-nums">
                           {ord.total} <span className="text-xs text-cyan-400 font-bold">ج.م. (كاش)</span>
                         </div>
+                        <div className="text-[11px] text-slate-400 font-medium">
+                          <span>الأصناف: {ord.subtotal} ج.م.</span>
+                          <span className="mx-1 text-slate-600">|</span>
+                          <span className="text-pink-400 font-bold">التوصيل: {ord.deliveryFee} ج.م.</span>
+                        </div>
 
                         <div className="flex flex-wrap items-center gap-2">
                           {ord.status === 'PENDING' && (
@@ -1717,11 +2103,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 onClick={() => {
                   setEditingLocation({
                     governorate: 'القاهرة',
-                    city: 'القاهرة الجديدة',
+                    city: '',
                     area: '',
-                    deliveryFee: 30,
-                    minOrder: 100,
-                    estimatedMin: 45,
+                    deliveryFee: '' as any,
+                    minOrder: '' as any,
+                    estimatedMin: '' as any,
                     isActive: true,
                   });
                   setIsNewLocation(true);
@@ -1811,6 +2197,91 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 <span>+ إضافة مجموعة تخصيص جديدة</span>
               </button>
             </div>
+
+            {/* Owner Exclusive: Live Custom Donut Design Studio */}
+            {isOwner && (
+              <div className="p-6 rounded-3xl bg-slate-900 border border-pink-500/30 space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-pink-500 to-cyan-500 flex items-center justify-center text-white shadow-md">
+                      <Sparkles className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h4 className="text-sm font-black text-white flex items-center gap-2">
+                        <span>استوديو تصميم الدونت الخاص بالمالك (حصري للمالك)</span>
+                        <span className="text-[10px] bg-pink-500/20 text-pink-400 border border-pink-500/30 px-2 py-0.5 rounded-full font-bold">
+                          Owner Only Preview
+                        </span>
+                      </h4>
+                      <p className="text-xs text-slate-400">
+                        متاح فقط لحساب مالك المتجر لاختبار وتجربة مصمم الدونت المخصص والإضافات والأسعار مباشرة. تم إخفاؤه تماماً عن واجهة العملاء.
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setShowOwnerCustomDonutTester(!showOwnerCustomDonutTester)}
+                    className="px-4 py-2 rounded-2xl bg-slate-800 hover:bg-slate-700 text-xs font-bold text-pink-400 border border-pink-500/30 transition cursor-pointer"
+                  >
+                    {showOwnerCustomDonutTester ? 'إخفاء استوديو التصميم' : 'فتح استوديو التصميم للاختبار'}
+                  </button>
+                </div>
+
+                {showOwnerCustomDonutTester && (
+                  <div className="pt-4 border-t border-slate-800">
+                    <CustomDonutBuilder
+                      lang={lang}
+                      customizationGroups={customizationGroups}
+                      donutProducts={adminProducts}
+                      onAddToCart={(item) => {
+                        setTestedCustomDonuts((prev) => [item, ...prev]);
+                        showSuccess(
+                          lang === 'ar'
+                            ? `تمت تجربة تصميم الدونت بنجاح (${item.unitPrice} ج.م.)`
+                            : `Custom donut tested successfully (${item.unitPrice} EGP)`
+                        );
+                      }}
+                    />
+
+                    {testedCustomDonuts.length > 0 && (
+                      <div className="mt-6 p-4 rounded-2xl bg-slate-950 border border-slate-800 space-y-3">
+                        <div className="flex items-center justify-between">
+                          <h5 className="text-xs font-bold text-slate-300">سجل تصميمات الدونت المجربة في هذه الجلسة:</h5>
+                          <button
+                            onClick={() => setTestedCustomDonuts([])}
+                            className="text-[11px] text-slate-500 hover:text-red-400 cursor-pointer"
+                          >
+                            مسح سجل التجربة
+                          </button>
+                        </div>
+                        <div className="space-y-2">
+                          {testedCustomDonuts.map((item, idx) => (
+                            <div
+                              key={idx}
+                              className="p-3 rounded-xl bg-slate-900 border border-slate-800 flex items-center justify-between text-xs"
+                            >
+                              <div>
+                                <span className="font-bold text-white">{item.product.nameAr}</span>
+                                <span className="text-pink-400 font-mono font-bold mr-2">
+                                  {item.unitPrice} ج.م.
+                                </span>
+                                {item.selectedCustomizations && item.selectedCustomizations.length > 0 && (
+                                  <p className="text-[11px] text-slate-400 mt-1">
+                                    الإضافات: {item.selectedCustomizations.map((c) => `${c.groupName}: ${c.optionName}`).join(' · ')}
+                                  </p>
+                                )}
+                              </div>
+                              <span className="text-[10px] bg-emerald-500/20 text-emerald-400 px-2 py-0.5 rounded-full font-bold">
+                                تم الحساب بنجاح
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
 
             {customizationGroups.length === 0 ? (
               <div className="p-16 text-center rounded-3xl bg-slate-900 border border-slate-800 space-y-4">
@@ -2214,6 +2685,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           <span className={adm.permissions?.canManageProducts ? 'text-emerald-400' : 'text-slate-600 line-through'}>
                             {adm.permissions?.canManageProducts ? '✓' : '✗'} إدارة الدونتس والصور
                           </span>
+                          <span className={adm.permissions?.canManageOffers ? 'text-amber-400 font-bold' : 'text-slate-600 line-through'}>
+                            {adm.permissions?.canManageOffers ? '✓' : '✗'} إدارة العروض الخاصة
+                          </span>
+                          <span className={adm.permissions?.canManageAdvertisements ? 'text-pink-400 font-bold' : 'text-slate-600 line-through'}>
+                            {adm.permissions?.canManageAdvertisements ? '✓' : '✗'} إدارة الإعلانات والبانرات
+                          </span>
                           <span className={adm.permissions?.canManageOrders ? 'text-emerald-400' : 'text-slate-600 line-through'}>
                             {adm.permissions?.canManageOrders ? '✓' : '✗'} إدارة وتأكيد الطلبات
                           </span>
@@ -2224,7 +2701,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             {adm.permissions?.canManageCustomers ? '✓' : '✗'} سجل العملاء والحظر
                           </span>
                           <span className={adm.permissions?.canManageSettings ? 'text-emerald-400' : 'text-slate-600 line-through'}>
-                            {adm.permissions?.canManageSettings ? '✓' : '✗'} إعدادات المتجر والإعلانات
+                            {adm.permissions?.canManageSettings ? '✓' : '✗'} إعدادات المتجر وبيانات التواصل
                           </span>
                         </div>
                       )}
@@ -2239,7 +2716,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         {/* ---------------- 6. Audit Logs ---------------- */}
         {activeTab === 'AUDIT_LOGS' && (
           <div className="space-y-4">
-            <div className="p-4 rounded-3xl bg-slate-900 border border-slate-800 flex justify-between items-center">
+            <div className="p-4 rounded-3xl bg-slate-900 border border-slate-800 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
               <div>
                 <h3 className="text-xs font-bold text-slate-200">سجل النشاط الإداري والعمليات</h3>
                 <p className="text-[11px] text-slate-500">
@@ -2247,8 +2724,46 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </p>
               </div>
               <span className="text-xs text-cyan-400 font-mono font-bold">
-                {auditLogs.length} سجل محفوظ
+                {filteredAuditLogs.length} من {auditLogs.length} سجل محفوظ
               </span>
+            </div>
+
+            {/* Search and Role Filter for Audit Trail */}
+            <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center">
+              <div className="relative flex-1">
+                <Search className="w-4 h-4 absolute top-1/2 -translate-y-1/2 right-3 text-slate-400" />
+                <input
+                  type="text"
+                  value={auditLogSearch}
+                  onChange={(e) => setAuditLogSearch(e.target.value)}
+                  placeholder="ابحث في سجل العمليات باسم المنفذ، نوع الإجراء، أو تفاصيل العملية..."
+                  className="w-full pl-4 pr-10 py-2.5 rounded-2xl bg-slate-900 border border-slate-800 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500"
+                />
+                {auditLogSearch && (
+                  <button
+                    onClick={() => setAuditLogSearch('')}
+                    className="absolute top-1/2 -translate-y-1/2 left-3 text-slate-500 hover:text-white text-xs cursor-pointer"
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+
+              <div className="flex items-center gap-1.5 shrink-0">
+                {(['ALL', 'OWNER', 'ADMIN'] as const).map((r) => (
+                  <button
+                    key={r}
+                    onClick={() => setAuditRoleFilter(r)}
+                    className={`px-3 py-2 rounded-xl text-xs font-bold transition cursor-pointer ${
+                      auditRoleFilter === r
+                        ? 'bg-cyan-500 text-white'
+                        : 'bg-slate-900 text-slate-400 hover:text-white border border-slate-800'
+                    }`}
+                  >
+                    {r === 'ALL' ? 'كافة الأدوار' : r === 'OWNER' ? 'المالك (Owner)' : 'المشرفين (Admins)'}
+                  </button>
+                ))}
+              </div>
             </div>
 
             <div className="rounded-3xl bg-slate-900 border border-slate-800 overflow-hidden">
@@ -2263,14 +2778,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-800 text-slate-300 font-sans">
-                  {auditLogs.length === 0 ? (
+                  {filteredAuditLogs.length === 0 ? (
                     <tr>
                       <td colSpan={5} className="p-12 text-center text-slate-500 font-[Cairo]">
-                        لا توجد سجلات بعد. سيتم توثيق كل خطوة إدارية تلقائياً.
+                        لا توجد سجلات مطابقة للبحث أو الدور المحدد.
                       </td>
                     </tr>
                   ) : (
-                    auditLogs.map((log) => (
+                    filteredAuditLogs.map((log) => (
                       <tr key={log.id} className="hover:bg-slate-800/40">
                         <td className="p-4 font-mono text-slate-400 whitespace-nowrap">
                           {new Date(log.timestamp).toLocaleString('ar-EG', {
@@ -2529,14 +3044,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     <span>{savingOwnerProfile ? (lang === 'ar' ? 'جاري الحفظ...' : 'Saving...') : (lang === 'ar' ? 'حفظ بيانات المالك' : 'Save Owner Profile')}</span>
                   </button>
 
-                  <button
-                    type="button"
-                    onClick={handleResetOwnerSlot}
-                    className="px-4 py-3 bg-red-950/60 hover:bg-red-900 text-red-300 border border-red-800/80 rounded-2xl text-xs font-bold transition cursor-pointer flex items-center gap-2"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                    <span>{lang === 'ar' ? 'تفريغ خانة المالك لإعادة التسجيل من البداية' : 'Release Owner Slot for Re-registration'}</span>
-                  </button>
+                  <div className="flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-slate-950 border border-slate-800 text-[11px] text-slate-400">
+                    <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
+                    <span>{lang === 'ar' ? 'حساب المالك دائم ومحمي ولا يمكن حذفه أو استبداله' : 'Owner account is permanent and protected'}</span>
+                  </div>
                 </div>
               </form>
             </div>
@@ -2598,6 +3109,355 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </div>
               )}
             </div>
+          </div>
+        )}
+
+        {/* ---------------- 9. Monthly Accounting & Certified Archives (Owner Only) ---------------- */}
+        {activeTab === 'ACCOUNTING' && isOwner && (
+          <div className="space-y-6">
+            {/* Top Toolbar: Month Picker & Actions */}
+            <div className="p-6 rounded-3xl bg-slate-900 border border-slate-800 flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+              <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+                <div className="space-y-1">
+                  <label className="text-[11px] font-bold text-slate-400 block">
+                    {lang === 'ar' ? 'اختر الفترة المحاسبية الشهرية:' : 'Select Accounting Period:'}
+                  </label>
+                  <div className="relative">
+                    <select
+                      value={selectedMonthKey}
+                      onChange={(e) => handleSelectAccountingMonth(e.target.value)}
+                      className="px-4 py-2.5 rounded-2xl bg-slate-950 border border-slate-700 text-xs font-bold text-white focus:outline-none focus:border-emerald-500 cursor-pointer min-w-[200px]"
+                    >
+                      {accountingMonths.map((m) => {
+                        const isArchived = accountingArchives.some((a) => a.monthKey === m);
+                        const isActive = m === activeAccountingMonthKey;
+                        return (
+                          <option key={m} value={m}>
+                            {m} {isArchived ? '(مؤرشف ومغلق)' : isActive ? '(فترة نشطة)' : ''}
+                          </option>
+                        );
+                      })}
+                      {accountingMonths.length === 0 && (
+                        <option value={new Date().toISOString().slice(0, 7)}>
+                          {new Date().toISOString().slice(0, 7)} (فترة نشطة)
+                        </option>
+                      )}
+                    </select>
+                  </div>
+                </div>
+
+                <div className="pt-4 sm:pt-4">
+                  {accountingReport?.isClosed ? (
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-slate-800 text-slate-300 border border-slate-700 text-xs font-bold">
+                      <Lock className="w-3.5 h-3.5 text-amber-400" />
+                      <span>{lang === 'ar' ? 'شهر مغلق ومؤرشف رسمياً' : 'Closed & Archived Month'}</span>
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-950/80 text-emerald-300 border border-emerald-700/80 text-xs font-bold">
+                      <CheckCircle className="w-3.5 h-3.5 text-emerald-400" />
+                      <span>{lang === 'ar' ? 'فترة محاسبية نشطة مفتوحة للعمليات' : 'Active Operational Period'}</span>
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* Action Buttons: Export, Print, Close, New Period */}
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handlePrintReport}
+                  className="px-4 py-2.5 rounded-2xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold border border-slate-700 flex items-center gap-2 transition cursor-pointer"
+                  title="طباعة التقرير الشهري المعتمد"
+                >
+                  <Printer className="w-4 h-4 text-cyan-400" />
+                  <span>{lang === 'ar' ? 'طباعة التقرير الرسمي' : 'Print Report'}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleExportCSV}
+                  className="px-4 py-2.5 rounded-2xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold border border-slate-700 flex items-center gap-2 transition cursor-pointer"
+                  title="تصدير السجلات إلى ملف Excel متوافق مع اللغة العربية"
+                >
+                  <Download className="w-4 h-4 text-emerald-400" />
+                  <span>{lang === 'ar' ? 'تصدير كشف Excel (CSV)' : 'Export CSV'}</span>
+                </button>
+
+                {!accountingReport?.isClosed ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCloseMonthNotes('');
+                      setShowCloseMonthModal(true);
+                    }}
+                    className="px-4 py-2.5 rounded-2xl bg-gradient-to-l from-amber-600 to-amber-500 hover:from-amber-500 hover:to-amber-400 text-white text-xs font-bold shadow-md flex items-center gap-2 transition cursor-pointer"
+                  >
+                    <Archive className="w-4 h-4" />
+                    <span>{lang === 'ar' ? 'إغلاق وأرشفة الشهر' : 'Close Month'}</span>
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => handleReopenMonth(selectedMonthKey)}
+                    className="px-4 py-2.5 rounded-2xl bg-slate-800 hover:bg-slate-700 text-amber-300 border border-amber-800 text-xs font-bold flex items-center gap-2 transition cursor-pointer"
+                  >
+                    <Unlock className="w-4 h-4" />
+                    <span>{lang === 'ar' ? 'إعادة فتح الشهر' : 'Reopen Month'}</span>
+                  </button>
+                )}
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    const nextKey = getNextMonthKey(selectedMonthKey || activeAccountingMonthKey);
+                    setNewPeriodMonthInput(nextKey);
+                    setNewPeriodNotes('');
+                    setShowNewPeriodModal(true);
+                  }}
+                  className="px-4 py-2.5 rounded-2xl bg-gradient-to-l from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 text-white text-xs font-bold shadow-md flex items-center gap-2 transition cursor-pointer"
+                >
+                  <FolderPlus className="w-4 h-4" />
+                  <span>{lang === 'ar' ? 'بدء فترة محاسبية جديدة' : 'Start New Period'}</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Closed Archive Banner Notice */}
+            {accountingReport?.isClosed && accountingReport.archiveRecord && (
+              <div className="p-4 rounded-3xl bg-amber-950/40 border border-amber-800/60 text-xs text-amber-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <Archive className="w-5 h-5 text-amber-400 shrink-0" />
+                  <div>
+                    <p className="font-bold">
+                      تم إغلاق وأرشفة هذا الشهر رسمياً بتاريخ{' '}
+                      {new Date(accountingReport.archiveRecord.closedAt).toLocaleString('ar-EG')} بواسطة{' '}
+                      {accountingReport.archiveRecord.closedByName || accountingReport.archiveRecord.closedById}
+                    </p>
+                    {accountingReport.archiveRecord.closingNotes && (
+                      <p className="text-[11px] text-amber-300/80 mt-0.5">
+                        ملاحظات الإغلاق: {accountingReport.archiveRecord.closingNotes}
+                      </p>
+                    )}
+                  </div>
+                </div>
+                <span className="text-[10px] bg-amber-500/20 text-amber-300 border border-amber-500/30 px-3 py-1 rounded-full font-mono shrink-0">
+                  سجل مؤرشف ومحمي
+                </span>
+              </div>
+            )}
+
+            {loadingAccounting && (
+              <div className="p-12 text-center rounded-3xl bg-slate-900 border border-slate-800 text-slate-400 flex items-center justify-center gap-3">
+                <RefreshCw className="w-5 h-5 animate-spin text-emerald-400" />
+                <span className="text-xs font-bold">جاري تحميل وتدقيق البيانات المحاسبية للشهر المحدد...</span>
+              </div>
+            )}
+
+            {/* Financial Summary Cards */}
+            {accountingReport && (
+              <div className="space-y-6">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                  {/* Card 1: Collected Cash (Highlight) */}
+                  <div className="p-6 rounded-3xl bg-gradient-to-br from-emerald-950/70 to-slate-900 border-2 border-emerald-500/60 shadow-lg space-y-1">
+                    <span className="text-xs font-bold text-emerald-300 flex items-center justify-between">
+                      <span>إجمالي المبيعات المحصلة نقداً</span>
+                      <DollarSign className="w-4 h-4 text-emerald-400" />
+                    </span>
+                    <p className="text-3xl font-black text-emerald-400 tabular-nums">
+                      {accountingReport.summary.collectedAmount.toFixed(2)}{' '}
+                      <span className="text-sm">ج.م.</span>
+                    </p>
+                    <p className="text-[10px] text-emerald-300/80">
+                      الدفع عند الاستلام (COD) للطلبات المسلمة
+                    </p>
+                  </div>
+
+                  {/* Card 2: Gross Sales */}
+                  <div className="p-6 rounded-3xl bg-slate-900 border border-slate-800 space-y-1">
+                    <span className="text-xs font-bold text-slate-400">إجمالي المبيعات المسجلة</span>
+                    <p className="text-3xl font-black text-pink-400 tabular-nums">
+                      {accountingReport.summary.grossSales.toFixed(2)}{' '}
+                      <span className="text-sm">ج.م.</span>
+                    </p>
+                    <p className="text-[10px] text-slate-500">القيمة الإجمالية لكافة الطلبات</p>
+                  </div>
+
+                  {/* Card 3: Pending / Unpaid COD */}
+                  <div className="p-6 rounded-3xl bg-slate-900 border border-slate-800 space-y-1">
+                    <span className="text-xs font-bold text-slate-400">مبيعات قيد التوصيل والتحصيل</span>
+                    <p className="text-3xl font-black text-amber-400 tabular-nums">
+                      {accountingReport.summary.unpaidAmount.toFixed(2)}{' '}
+                      <span className="text-sm">ج.م.</span>
+                    </p>
+                    <p className="text-[10px] text-slate-500">طلبات جارية مع المناديب</p>
+                  </div>
+
+                  {/* Card 4: Cancelled Amount */}
+                  <div className="p-6 rounded-3xl bg-slate-900 border border-slate-800 space-y-1">
+                    <span className="text-xs font-bold text-slate-400">طلبات ملغاة أو غير مستلمة</span>
+                    <p className="text-3xl font-black text-red-400 tabular-nums">
+                      {accountingReport.summary.cancelledAmount.toFixed(2)}{' '}
+                      <span className="text-sm">ج.م.</span>
+                    </p>
+                    <p className="text-[10px] text-slate-500">
+                      {accountingReport.summary.cancelledOrders} طلبات ملغاة
+                    </p>
+                  </div>
+
+                  {/* Card 5: Delivery Fees Collected */}
+                  <div className="p-5 rounded-3xl bg-slate-900 border border-slate-800 space-y-1">
+                    <span className="text-xs font-bold text-slate-400">رسوم التوصيل المحصلة</span>
+                    <p className="text-2xl font-black text-cyan-400 tabular-nums">
+                      {accountingReport.summary.deliveryFeesCollected.toFixed(2)}{' '}
+                      <span className="text-xs">ج.م.</span>
+                    </p>
+                    <p className="text-[10px] text-slate-500">للطلبات المسلمة للعملاء</p>
+                  </div>
+
+                  {/* Card 6: Products Net Sales */}
+                  <div className="p-5 rounded-3xl bg-slate-900 border border-slate-800 space-y-1">
+                    <span className="text-xs font-bold text-slate-400">صافي مبيعات المنتجات</span>
+                    <p className="text-2xl font-black text-purple-400 tabular-nums">
+                      {accountingReport.summary.productsSalesTotal.toFixed(2)}{' '}
+                      <span className="text-xs">ج.م.</span>
+                    </p>
+                    <p className="text-[10px] text-slate-500">دون احتساب رسوم التوصيل</p>
+                  </div>
+
+                  {/* Card 7: Average Order Value */}
+                  <div className="p-5 rounded-3xl bg-slate-900 border border-slate-800 space-y-1">
+                    <span className="text-xs font-bold text-slate-400">متوسط قيمة الطلب</span>
+                    <p className="text-2xl font-black text-white tabular-nums">
+                      {accountingReport.summary.averageOrderValue.toFixed(2)}{' '}
+                      <span className="text-xs">ج.م.</span>
+                    </p>
+                    <p className="text-[10px] text-slate-500">لكل طلب مكتمل ومحصل</p>
+                  </div>
+
+                  {/* Card 8: Delivered Orders Count */}
+                  <div className="p-5 rounded-3xl bg-slate-900 border border-slate-800 space-y-1">
+                    <span className="text-xs font-bold text-slate-400">نسبة نجاح التوصيل</span>
+                    <p className="text-2xl font-black text-emerald-400 tabular-nums">
+                      {accountingReport.summary.deliveredOrders}{' '}
+                      <span className="text-xs text-slate-400">من {accountingReport.summary.totalOrders}</span>
+                    </p>
+                    <p className="text-[10px] text-slate-500">
+                      {accountingReport.summary.totalOrders > 0
+                        ? `${Math.round((accountingReport.summary.deliveredOrders / accountingReport.summary.totalOrders) * 100)}% معدل التسليم`
+                        : 'لا توجد طلبات'}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Historical Itemized Orders Table for this Month */}
+                <div className="space-y-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-3xl bg-slate-900 border border-slate-800">
+                    <div>
+                      <h4 className="text-sm font-bold text-white flex items-center gap-2">
+                        <FileText className="w-4 h-4 text-emerald-400" />
+                        <span>كشف الطلبات التاريخي المفصل لشهر {accountingReport.summary.monthKey} ({accountingReport.summary.monthNameAr})</span>
+                      </h4>
+                      <p className="text-xs text-slate-400 mt-0.5">
+                        جميع الطلبات محفوظة ومؤرشفة نهائياً مع تفاصيل أسعارها ورسوم توصيلها الأصلية دون أي تعديل.
+                      </p>
+                    </div>
+                    <span className="text-xs font-mono font-bold text-cyan-400 shrink-0">
+                      {accountingReport.orders.length} طلب في هذا الشهر
+                    </span>
+                  </div>
+
+                  <div className="rounded-3xl bg-slate-900 border border-slate-800 overflow-hidden">
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-right text-xs">
+                        <thead className="bg-slate-950 text-slate-400 border-b border-slate-800">
+                          <tr>
+                            <th className="p-4 whitespace-nowrap">رقم الطلب</th>
+                            <th className="p-4 whitespace-nowrap">الوقت والتاريخ</th>
+                            <th className="p-4 whitespace-nowrap">العميل ورقم الهاتف</th>
+                            <th className="p-4 whitespace-nowrap">المنطقة والعنوان</th>
+                            <th className="p-4 whitespace-nowrap">المنتجات</th>
+                            <th className="p-4 whitespace-nowrap">قيمة المنتجات</th>
+                            <th className="p-4 whitespace-nowrap">رسوم التوصيل</th>
+                            <th className="p-4 whitespace-nowrap">إجمالي الطلب</th>
+                            <th className="p-4 whitespace-nowrap">حالة الطلب والتحصيل</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-800 text-slate-300 font-sans">
+                          {accountingReport.orders.length === 0 ? (
+                            <tr>
+                              <td colSpan={9} className="p-12 text-center text-slate-500 font-[Cairo]">
+                                لا توجد طلبات مسجلة في شهر {selectedMonthKey}.
+                              </td>
+                            </tr>
+                          ) : (
+                            accountingReport.orders.map((ord) => (
+                              <tr key={ord.id} className="hover:bg-slate-800/40">
+                                <td className="p-4 font-mono font-black text-pink-400">
+                                  #{ord.orderNumber}
+                                </td>
+                                <td className="p-4 font-mono text-slate-400 whitespace-nowrap">
+                                  {new Date(ord.createdAt).toLocaleString('ar-EG', {
+                                    dateStyle: 'short',
+                                    timeStyle: 'short',
+                                  })}
+                                </td>
+                                <td className="p-4">
+                                  <p className="font-bold text-white font-[Cairo]">{ord.customerName}</p>
+                                  <a href={`tel:${ord.customerPhone}`} className="text-cyan-400 font-mono text-[11px] hover:underline">
+                                    {ord.customerPhone}
+                                  </a>
+                                </td>
+                                <td className="p-4 max-w-xs font-[Cairo]">
+                                  <p className="text-slate-200 font-bold">{ord.addressDetails.area} - {ord.addressDetails.city}</p>
+                                  <p className="text-slate-400 text-[11px] truncate">
+                                    ش {ord.addressDetails.street} · عمارة {ord.addressDetails.buildingNumber}
+                                  </p>
+                                </td>
+                                <td className="p-4 max-w-xs font-[Cairo]">
+                                  {ord.items.map((it, idx) => (
+                                    <div key={idx} className="text-[11px] text-slate-300">
+                                      • {it.product?.nameAr || it.productNameAr} x{it.quantity} ({(it.unitPrice * it.quantity).toFixed(2)} ج.م.)
+                                    </div>
+                                  ))}
+                                </td>
+                                <td className="p-4 font-mono font-bold text-slate-300 whitespace-nowrap">
+                                  {ord.subtotal.toFixed(2)} ج.م.
+                                </td>
+                                <td className="p-4 font-mono text-cyan-400 whitespace-nowrap">
+                                  {ord.deliveryFee.toFixed(2)} ج.م.
+                                </td>
+                                <td className="p-4 font-mono font-black text-white whitespace-nowrap">
+                                  {ord.total.toFixed(2)} ج.م.
+                                </td>
+                                <td className="p-4 whitespace-nowrap">
+                                  <span
+                                    className={`px-2.5 py-1 rounded-full text-[11px] font-bold border inline-block ${
+                                      ord.status === 'DELIVERED'
+                                        ? 'bg-emerald-950 text-emerald-400 border-emerald-800'
+                                        : ord.status === 'CANCELLED' || ord.status === 'NOT_RECEIVED'
+                                        ? 'bg-red-950 text-red-400 border-red-800'
+                                        : 'bg-amber-950 text-amber-400 border-amber-800'
+                                    }`}
+                                  >
+                                    {t.status[ord.status] || ord.status}
+                                    {ord.status === 'DELIVERED' && ' (كاش محصل)'}
+                                  </span>
+                                  {ord.cancellationReason && (
+                                    <p className="text-[10px] text-red-400 mt-1 max-w-[160px] truncate">
+                                      السبب: {ord.cancellationReason}
+                                    </p>
+                                  )}
+                                </td>
+                              </tr>
+                            ))
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </main>
@@ -3097,7 +3957,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   required
                   value={editingLocation.deliveryFee !== undefined && editingLocation.deliveryFee !== null ? editingLocation.deliveryFee : ''}
                   onChange={(e) => setEditingLocation({ ...editingLocation, deliveryFee: e.target.value.replace(/[^0-9.]/g, '') as any })}
-                  placeholder="30"
+                  placeholder="مثال: 45"
                   className="w-full p-2.5 rounded-xl bg-slate-950 border border-slate-800 text-xs text-white font-mono"
                 />
               </div>
@@ -3108,7 +3968,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   inputMode="decimal"
                   value={editingLocation.minOrder !== undefined && editingLocation.minOrder !== null ? editingLocation.minOrder : ''}
                   onChange={(e) => setEditingLocation({ ...editingLocation, minOrder: e.target.value.replace(/[^0-9.]/g, '') as any })}
-                  placeholder="100"
+                  placeholder="مثال: 100"
                   className="w-full p-2.5 rounded-xl bg-slate-950 border border-slate-800 text-xs text-white font-mono"
                 />
               </div>
@@ -3119,7 +3979,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   inputMode="numeric"
                   value={editingLocation.estimatedMin !== undefined && editingLocation.estimatedMin !== null ? editingLocation.estimatedMin : ''}
                   onChange={(e) => setEditingLocation({ ...editingLocation, estimatedMin: e.target.value.replace(/[^0-9]/g, '') as any })}
-                  placeholder="45"
+                  placeholder="مثال: 40"
                   className="w-full p-2.5 rounded-xl bg-slate-950 border border-slate-800 text-xs text-white font-mono"
                 />
               </div>
@@ -3831,6 +4691,26 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               <label className="flex items-center gap-2 cursor-pointer">
                 <input
                   type="checkbox"
+                  checked={adminPermissions.canManageOffers}
+                  onChange={(e) => setAdminPermissions({ ...adminPermissions, canManageOffers: e.target.checked })}
+                  className="rounded text-amber-500"
+                />
+                <span className="text-xs text-slate-300 font-bold">إدارة العروض الخاصة والبوكسات التوفيرية</span>
+              </label>
+
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={adminPermissions.canManageAdvertisements}
+                  onChange={(e) => setAdminPermissions({ ...adminPermissions, canManageAdvertisements: e.target.checked })}
+                  className="rounded text-pink-500"
+                />
+                <span className="text-xs text-slate-300 font-bold">إدارة الإعلانات، البانرات والنوافذ المنبثقة</span>
+              </label>
+
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
                   checked={adminPermissions.canManageOrders}
                   onChange={(e) => setAdminPermissions({ ...adminPermissions, canManageOrders: e.target.checked })}
                   className="rounded text-pink-600"
@@ -4298,6 +5178,178 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Accounting Modal: Close Month & Archive */}
+      {showCloseMonthModal && accountingReport && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-xs">
+          <form
+            onSubmit={handleCloseMonth}
+            className="bg-slate-900 border border-slate-800 rounded-3xl p-6 max-w-lg w-full space-y-4 max-h-[90vh] overflow-y-auto"
+          >
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-2 text-amber-400">
+                <Archive className="w-5 h-5" />
+                <h3 className="font-black text-white text-base">
+                  {lang === 'ar' ? 'إغلاق وأرشفة الشهر المحاسبي' : 'Close & Archive Accounting Month'}
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowCloseMonthModal(false)}
+                className="text-slate-400 hover:text-white cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="p-4 rounded-2xl bg-amber-950/30 border border-amber-800/40 text-xs text-amber-200 space-y-2">
+              <p className="font-bold">
+                أنت على وشك إغلاق الفترة المحاسبية لشهر: {selectedMonthKey} ({accountingReport.summary.monthNameAr})
+              </p>
+              <p className="text-[11px] text-amber-300/80 leading-relaxed">
+                سيتم أرشفة الإحصائيات والمبالغ المالية رسمياً. تبقى كافة سجلات الطلبات التاريخية والعملاء محفوظة بأمان تام في قاعدة البيانات دون أي حذف.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 bg-slate-950 p-4 rounded-2xl border border-slate-800 text-xs">
+              <div>
+                <span className="text-slate-400 block text-[10px]">إجمالي المبيعات المحصلة</span>
+                <span className="font-black text-emerald-400 text-sm">
+                  {accountingReport.summary.collectedAmount.toFixed(2)} ج.م.
+                </span>
+              </div>
+              <div>
+                <span className="text-slate-400 block text-[10px]">الطلبات المسلمة كاش</span>
+                <span className="font-black text-white text-sm">
+                  {accountingReport.summary.deliveredOrders} طلب
+                </span>
+              </div>
+              <div>
+                <span className="text-slate-400 block text-[10px]">مبيعات جارية مع المناديب</span>
+                <span className="font-black text-amber-400 text-sm">
+                  {accountingReport.summary.unpaidAmount.toFixed(2)} ج.م.
+                </span>
+              </div>
+              <div>
+                <span className="text-slate-400 block text-[10px]">طلبات ملغاة أو مرفوضة</span>
+                <span className="font-black text-red-400 text-sm">
+                  {accountingReport.summary.cancelledAmount.toFixed(2)} ج.م.
+                </span>
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-slate-300">
+                {lang === 'ar' ? 'ملاحظات وتدقيق الإغلاق المحاسبي (اختياري):' : 'Closing Notes (Optional):'}
+              </label>
+              <textarea
+                rows={3}
+                value={closeMonthNotes}
+                onChange={(e) => setCloseMonthNotes(e.target.value)}
+                placeholder="مثال: تمت مطابقة نقدية المناديب المستلمة ومراجعة جميع فواتير الدفع عند الاستلام."
+                className="w-full p-3 rounded-2xl bg-slate-950 border border-slate-800 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-500"
+              />
+            </div>
+
+            <div className="flex justify-end gap-2 pt-3 border-t border-slate-800">
+              <button
+                type="button"
+                onClick={() => setShowCloseMonthModal(false)}
+                className="px-4 py-2.5 rounded-xl text-slate-400 hover:text-white text-xs font-bold cursor-pointer"
+              >
+                إلغاء
+              </button>
+              <button
+                type="submit"
+                disabled={closingOrStartingPeriod}
+                className="px-5 py-2.5 rounded-xl bg-gradient-to-l from-amber-600 to-amber-500 hover:from-amber-500 hover:to-amber-400 text-white text-xs font-bold shadow-md cursor-pointer flex items-center gap-2"
+              >
+                <Archive className="w-4 h-4" />
+                <span>{closingOrStartingPeriod ? 'جاري الأرشفة...' : 'تأكيد إغلاق الشهر وأرشفته'}</span>
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* Accounting Modal: Start New Period */}
+      {showNewPeriodModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-xs">
+          <form
+            onSubmit={handleStartNewPeriod}
+            className="bg-slate-900 border border-slate-800 rounded-3xl p-6 max-w-lg w-full space-y-4"
+          >
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-2 text-emerald-400">
+                <FolderPlus className="w-5 h-5" />
+                <h3 className="font-black text-white text-base">
+                  {lang === 'ar' ? 'بدء فترة محاسبية جديدة' : 'Start New Accounting Period'}
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowNewPeriodModal(false)}
+                className="text-slate-400 hover:text-white cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="p-4 rounded-2xl bg-emerald-950/30 border border-emerald-800/40 text-xs text-emerald-200 space-y-1">
+              <p className="font-bold">فترة تشغيلية جديدة لمتجر ويف دونتس مصر</p>
+              <p className="text-[11px] text-emerald-300/80 leading-relaxed">
+                بدء فترة جديدة يحدد الشهر النشط لتسجيل ومتابعة العمليات الجديدة دون المساس بأي من طلبات أو أرصدة الشهور السابقة.
+              </p>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-slate-300">
+                {lang === 'ar' ? 'رمز الشهر الجديد (صيغة YYYY-MM):' : 'New Month Key (YYYY-MM):'}
+              </label>
+              <input
+                type="text"
+                required
+                value={newPeriodMonthInput}
+                onChange={(e) => setNewPeriodMonthInput(e.target.value)}
+                placeholder="2026-12"
+                pattern="^\d{4}-\d{2}$"
+                className="w-full p-3 rounded-2xl bg-slate-950 border border-slate-800 text-xs text-white font-mono placeholder-slate-500 focus:outline-none focus:border-emerald-500"
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-slate-300">
+                {lang === 'ar' ? 'ملاحظات افتتاح الفترة (اختياري):' : 'Opening Notes (Optional):'}
+              </label>
+              <textarea
+                rows={2}
+                value={newPeriodNotes}
+                onChange={(e) => setNewPeriodNotes(e.target.value)}
+                placeholder="مثال: بدء العمليات التشغيلية والمبيعات للشهر الجديد."
+                className="w-full p-3 rounded-2xl bg-slate-950 border border-slate-800 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500"
+              />
+            </div>
+
+            <div className="flex justify-end gap-2 pt-3 border-t border-slate-800">
+              <button
+                type="button"
+                onClick={() => setShowNewPeriodModal(false)}
+                className="px-4 py-2.5 rounded-xl text-slate-400 hover:text-white text-xs font-bold cursor-pointer"
+              >
+                إلغاء
+              </button>
+              <button
+                type="submit"
+                disabled={closingOrStartingPeriod || !newPeriodMonthInput}
+                className="px-5 py-2.5 rounded-xl bg-gradient-to-l from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 text-white text-xs font-bold shadow-md cursor-pointer flex items-center gap-2"
+              >
+                <FolderPlus className="w-4 h-4" />
+                <span>{closingOrStartingPeriod ? 'جاري البدء...' : 'بدء الفترة وتفعيلها'}</span>
+              </button>
+            </div>
+          </form>
         </div>
       )}
 

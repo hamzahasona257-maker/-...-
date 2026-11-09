@@ -16,6 +16,8 @@ async function request(path: string, options: RequestInit = {}) {
   const token = getToken();
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
+    'Cache-Control': 'no-cache, no-store, must-revalidate',
+    'Pragma': 'no-cache',
     ...(options.headers as Record<string, string>),
   };
 
@@ -24,13 +26,16 @@ async function request(path: string, options: RequestInit = {}) {
   }
 
   const res = await fetch(path, {
+    cache: 'no-store',
     ...options,
     headers,
   });
 
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
-    throw new Error(data.error || `فشل الطلب مع رمز الحالة ${res.status}`);
+    const error: any = new Error(data.error || `فشل الطلب مع رمز الحالة ${res.status}`);
+    error.status = res.status;
+    throw error;
   }
   return data;
 }
@@ -169,4 +174,42 @@ export const api = {
   // Audit Logs & Stats
   getAuditLogs: (limit = 100) => request(`/api/admin/audit-logs?limit=${limit}`),
   getAdminStats: () => request('/api/admin/stats'),
+
+  // Monthly Accounting & Historical Records (Owner-Only)
+  getAccountingMonths: () => request('/api/owner/accounting/months'),
+  getAccountingReport: (monthKey: string) => request(`/api/owner/accounting/report/${monthKey}`),
+  closeAccountingMonth: (monthKey: string, body: { notes?: string }) =>
+    request(`/api/owner/accounting/close/${monthKey}`, { method: 'POST', body: JSON.stringify(body) }),
+  startNewAccountingPeriod: (body: { monthKey: string; notes?: string }) =>
+    request('/api/owner/accounting/start-new-period', { method: 'POST', body: JSON.stringify(body) }),
+  reopenAccountingMonth: (monthKey: string) =>
+    request(`/api/owner/accounting/reopen/${monthKey}`, { method: 'POST' }),
+
+  // Special Offers System (Special Bundled Products)
+  getOffers: () => request('/api/offers'),
+  getOfferById: (id: string) => request(`/api/offers/${id}`),
+  getAdminOffers: () => request('/api/admin/offers'),
+  createOffer: (body: any) =>
+    request('/api/admin/offers', { method: 'POST', body: JSON.stringify(body) }),
+  updateOffer: (id: string, body: any) =>
+    request(`/api/admin/offers/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
+  deleteOffer: (id: string) =>
+    request(`/api/admin/offers/${id}`, { method: 'DELETE' }),
+  toggleOfferActive: (id: string) =>
+    request(`/api/admin/offers/${id}/toggle-active`, { method: 'PATCH' }),
+
+  // Dedicated Advertisements System
+  getAdvertisements: (placement?: string) =>
+    request(`/api/advertisements${placement ? `?placement=${placement}` : ''}`),
+  getAdminAdvertisements: () => request('/api/admin/advertisements'),
+  createAdvertisement: (body: any) =>
+    request('/api/admin/advertisements', { method: 'POST', body: JSON.stringify(body) }),
+  updateAdvertisement: (id: string, body: any) =>
+    request(`/api/admin/advertisements/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
+  deleteAdvertisement: (id: string) =>
+    request(`/api/admin/advertisements/${id}`, { method: 'DELETE' }),
+  toggleAdvertisementActive: (id: string) =>
+    request(`/api/admin/advertisements/${id}/toggle-active`, { method: 'PATCH' }),
+  reorderAdvertisements: (orderedIds: string[]) =>
+    request('/api/admin/advertisements/reorder', { method: 'POST', body: JSON.stringify({ orderedIds }) }),
 };

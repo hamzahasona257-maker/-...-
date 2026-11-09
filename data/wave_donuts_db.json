@@ -50,9 +50,41 @@
       "isActive": true,
       "createdAt": "2026-11-02T15:20:11.548Z",
       "updatedAt": "2026-11-02T15:20:11.548Z"
+    },
+    {
+      "id": "usr_cust_1793796837996_87bo",
+      "name": "سارة مصطفى",
+      "email": "testcust_1793796837871@test.eg",
+      "phone": "01122334455",
+      "passwordHash": "$2b$10$X5WBhL8AoF0YXL4m9ND3SOFvOA7bzVPBw4aM6DTm8m.18M9MS588i",
+      "role": "CUSTOMER",
+      "isActive": true,
+      "block": {
+        "isBlocked": false
+      },
+      "notes": [],
+      "createdAt": "2026-11-04T12:53:57.996Z",
+      "updatedAt": "2026-11-04T12:53:58.015Z"
     }
   ],
-  "addresses": [],
+  "addresses": [
+    {
+      "userId": "usr_cust_1793796837996_87bo",
+      "title": "المنزل",
+      "governorate": "القاهرة",
+      "city": "القاهرة الجديدة",
+      "area": "التجمع الخامس",
+      "street": "شارع التسعين الشمالي",
+      "buildingNumber": "14B",
+      "floor": "3",
+      "apartment": "12",
+      "landmark": "بجوار مجمع البنوك",
+      "deliveryLocationId": "loc_1793632811075_eyez",
+      "isDefault": true,
+      "id": "addr_1793796838002_u755",
+      "createdAt": "2026-11-04T12:53:58.002Z"
+    }
+  ],
   "deliveryLocations": [
     {
       "governorate": "القاهرة",
@@ -60,7 +92,7 @@
       "area": "التجمع الخامس",
       "deliveryFee": 30,
       "minOrder": 50,
-      "estimatedMin": 35,
+      "estimatedMin": 40,
       "isActive": true,
       "id": "loc_1793632811075_eyez"
     }
@@ -71,6 +103,12 @@
       "nameAr": "دونتس محشية",
       "nameEn": "Filled Donuts",
       "slug": "filled-donuts"
+    },
+    {
+      "id": "cat_1793796745019_swf0",
+      "nameAr": "مشروبات ويف الساخنة والباردة",
+      "nameEn": "Wave Drinks",
+      "slug": "wave-drinks"
     }
   ],
   "products": [
@@ -89,10 +127,65 @@
       "options": [],
       "id": "prod_1793632811070_fgjmq",
       "createdAt": "2026-11-02T15:20:11.070Z",
-      "updatedAt": "2026-11-02T15:20:11.070Z"
+      "updatedAt": "2026-11-07T14:42:18.697Z",
+      "customizationGroupIds": []
+    },
+    {
+      "categoryId": "cat_1793796745019_swf0",
+      "nameAr": "سبانش لاتيه بارد",
+      "nameEn": "Iced Spanish Latte",
+      "descAr": "قهوة إسبريسو غنية مع حليب مكثف محلى وحليب طازج مع مكعبات ثلج منعشة",
+      "descEn": "Rich espresso with sweetened condensed milk and fresh cold milk over ice",
+      "ingredients": "",
+      "images": [],
+      "mainImage": "",
+      "basePrice": 65,
+      "isPublished": true,
+      "isAvailable": true,
+      "options": [],
+      "productType": "DRINK",
+      "customizationGroupIds": [
+        "grp_1793796744995_aud7t"
+      ],
+      "id": "prod_1793796745023_qp8mz",
+      "createdAt": "2026-11-04T12:52:25.023Z",
+      "updatedAt": "2026-11-04T12:52:25.023Z"
     }
   ],
-  "customizationGroups": [],
+  "customizationGroups": [
+    {
+      "nameAr": "حجم المشروب",
+      "nameEn": "Drink Size",
+      "descriptionAr": "",
+      "descriptionEn": "",
+      "type": "SINGLE_SELECT",
+      "isRequired": true,
+      "minSelections": 1,
+      "maxSelections": 1,
+      "options": [
+        {
+          "nameAr": "وسط (Medium)",
+          "priceDelta": 0,
+          "isAvailable": true,
+          "id": "opt_1793796838033_6cty"
+        },
+        {
+          "nameAr": "كبير (Large)",
+          "priceDelta": 15,
+          "isAvailable": true,
+          "id": "opt_1793796838033_cpma"
+        }
+      ],
+      "displayOrder": 0,
+      "isActive": true,
+      "assignedToAll": true,
+      "assignedProductIds": [],
+      "assignedCategoryIds": [],
+      "id": "grp_1793796838033_ox2ub",
+      "createdAt": "2026-11-04T12:53:58.033Z",
+      "updatedAt": "2026-11-04T12:53:58.033Z"
+    }
+  ],
   "orders": [
     {
       "id": "ord_1793632811308_dath7",
@@ -209,11 +302,11 @@
     "businessNameEn": "Wave Donuts",
     "sloganAr": "اركب موجة الحلاوة.",
     "sloganEn": "Ride the Sweet Wave.",
-    "phone": "",
+    "phone": "01000000001",
     "whatsapp": "",
     "aboutAr": "متجر ويف دونتس المتخصص في أشهى أنواع الدونتس الطازجة المخبوزة بأعلى معايير الجودة.",
     "aboutEn": "Wave Donuts specializes in freshly fried and glazed artisanal donuts.",
-    "announcementAr": "أهلاً بكم في متجر ويف دونتس! ترقبوا إطلاق قائمة منتجاتنا الطازجة قريباً.",
+    "announcementAr": "عرض خاص لفترة محدودة: خصم خاص اليوم 1794062538695!",
     "announcementEn": "Welcome to Wave Donuts! Our fresh menu will be available soon.",
     "showAnnouncement": true,
     "instagramUrl": "",
@@ -224,6 +317,77 @@
     "isOpenForOrders": true
   },
   "auditLogs": [
+    {
+      "id": "log_1794182614668_0oz3",
+      "performedById": "usr_owner_1793632811052",
+      "performedByName": "مالك ويف دونتس (الرئيسي)",
+      "performedByRole": "OWNER",
+      "action": "إعادة فتح الشهر المحاسبي: 2026-11",
+      "details": "تم فك أرشفة الشهر للسماح بمراجعة العمليات والتعديل الإداري",
+      "timestamp": "2026-11-09T00:03:34.668Z"
+    },
+    {
+      "id": "log_1794182614660_kwby",
+      "performedById": "usr_owner_1793632811052",
+      "performedByName": "مالك ويف دونتس (الرئيسي)",
+      "performedByRole": "OWNER",
+      "action": "إغلاق الشهر المحاسبي: نوفمبر 2026",
+      "details": "المبيعات الإجمالية المحصلة: 0 ج.م. | عدد الطلبات: 2 | تم الحفظ والأرشفة الدائمة",
+      "timestamp": "2026-11-09T00:03:34.660Z"
+    },
+    {
+      "id": "log_1793968697022_e6xr",
+      "performedById": "usr_owner_1793632811052",
+      "performedByName": "مالك ويف دونتس (الرئيسي)",
+      "performedByRole": "OWNER",
+      "action": "حذف منطقة التوصيل: دجلة المعادي",
+      "timestamp": "2026-11-06T12:38:17.022Z"
+    },
+    {
+      "id": "log_1793968697011_7or7",
+      "performedById": "usr_owner_1793632811052",
+      "performedByName": "مالك ويف دونتس (الرئيسي)",
+      "performedByRole": "OWNER",
+      "action": "تعديل منطقة التوصيل: دجلة المعادي",
+      "details": "رسوم التوصيل الجديدة: 65 ج.م.",
+      "timestamp": "2026-11-06T12:38:17.011Z"
+    },
+    {
+      "id": "log_1793968696997_gcca",
+      "performedById": "usr_owner_1793632811052",
+      "performedByName": "مالك ويف دونتس (الرئيسي)",
+      "performedByRole": "OWNER",
+      "action": "إضافة منطقة توصيل: القاهرة - دجلة المعادي",
+      "details": "رسوم التوصيل: 45 ج.م. | الحد الأدنى: 80 ج.م.",
+      "timestamp": "2026-11-06T12:38:16.997Z"
+    },
+    {
+      "id": "log_1793968677476_4ns0",
+      "performedById": "usr_owner_1793632811052",
+      "performedByName": "مالك ويف دونتس (الرئيسي)",
+      "performedByRole": "OWNER",
+      "action": "تعديل منطقة التوصيل: دجلة المعادي",
+      "details": "رسوم التوصيل الجديدة: 65 ج.م.",
+      "timestamp": "2026-11-06T12:37:57.476Z"
+    },
+    {
+      "id": "log_1793968677453_t729",
+      "performedById": "usr_owner_1793632811052",
+      "performedByName": "مالك ويف دونتس (الرئيسي)",
+      "performedByRole": "OWNER",
+      "action": "إضافة منطقة توصيل: القاهرة - دجلة المعادي",
+      "details": "رسوم التوصيل: 45 ج.م. | الحد الأدنى: 80 ج.م.",
+      "timestamp": "2026-11-06T12:37:57.453Z"
+    },
+    {
+      "id": "log_1793966448803_cbpk",
+      "performedById": "usr_owner_1793632811052",
+      "performedByName": "مالك ويف دونتس (الرئيسي)",
+      "performedByRole": "OWNER",
+      "action": "تحديث إعدادات المتجر ومعلومات التواصل",
+      "details": "تم تعديل أوقات العمل أو الإعلانات أو أرقام الهواتف",
+      "timestamp": "2026-11-06T12:00:48.803Z"
+    },
     {
       "id": "log_1793800144925_gved",
       "performedById": "usr_owner_1793632811052",
@@ -752,5 +916,6 @@
     }
   ],
   "blockedPhones": [],
+  "monthlyArchives": [],
   "lastOrderNumber": 102
 }

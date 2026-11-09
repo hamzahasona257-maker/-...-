@@ -4,6 +4,8 @@ export interface AdminPermissions {
   canManageDelivery: boolean;
   canManageSettings: boolean;
   canManageCustomers: boolean;
+  canManageOffers?: boolean;
+  canManageAdvertisements?: boolean;
 }
 
 export interface CustomerBlock {
@@ -125,10 +127,12 @@ export interface SelectedCustomizationItem {
   groupId: string;
   groupNameAr: string;
   groupNameEn: string;
+  groupName?: string;
   type: CustomizationFieldType;
   optionId?: string;
   optionNameAr?: string;
   optionNameEn?: string;
+  optionName?: string;
   priceDelta: number;
   textValue?: string;
   numberValue?: number;
@@ -190,6 +194,10 @@ export interface OrderItem {
   selectedProductOptions?: ProductOption[];
   selectedCustomizations?: SelectedCustomizationItem[];
   customNotes?: string;
+  product?: DonutProduct;
+  isOffer?: boolean;
+  offerId?: string;
+  offerItemsSummary?: string;
 }
 
 export interface Order {
@@ -243,6 +251,10 @@ export interface CartItem {
   selectedCustomizations?: SelectedCustomizationItem[];
   customNotes?: string;
   unitPrice: number; // بالجنيه المصري
+  isOffer?: boolean;
+  offerId?: string;
+  offerDetails?: SpecialOffer;
+  offerItemsSummary?: string;
 }
 
 export interface StoreSettings {
@@ -263,4 +275,101 @@ export interface StoreSettings {
   workingHoursAr: string;
   workingHoursEn: string;
   isOpenForOrders: boolean;
+}
+
+export interface MonthlyAccountingSummary {
+  monthKey: string; // e.g. "2026-11"
+  monthNameAr: string; // "نوفمبر 2026"
+  monthNameEn: string; // "November 2026"
+  totalOrders: number;
+  deliveredOrders: number;
+  cancelledOrders: number;
+  unpaidOrders: number;
+  totalSales: number; // Gross sales from delivered orders (EGP)
+  grossSales: number; // Total value of all orders in period (EGP)
+  collectedAmount: number; // Cash actually collected upon delivery (EGP)
+  unpaidAmount: number; // Pending / in-transit orders COD value (EGP)
+  cancelledAmount: number; // Total value of cancelled / not-received orders (EGP)
+  deliveryFeesCollected: number; // Delivery fees collected (EGP)
+  productsSalesTotal: number; // Products net sales excluding delivery fees (EGP)
+  averageOrderValue: number;
+  isClosed: boolean;
+  closedAt?: string;
+  closedById?: string;
+  closedByName?: string;
+  closingNotes?: string;
+}
+
+export interface MonthlyAccountingReport {
+  summary: MonthlyAccountingSummary;
+  orders: Order[];
+  isClosed?: boolean;
+  archiveRecord?: MonthlyArchiveRecord;
+  statusBreakdown: Record<string, { count: number; totalAmount: number }>;
+  topProducts: Array<{
+    productId: string;
+    nameAr: string;
+    nameEn: string;
+    quantity: number;
+    revenue: number;
+  }>;
+}
+
+export interface MonthlyArchiveRecord {
+  id: string; // "mclose_YYYY_MM"
+  monthKey: string; // "2026-11"
+  closedAt: string;
+  closedById: string;
+  closedByName: string;
+  closingNotes?: string;
+  summary: MonthlyAccountingSummary;
+}
+
+export interface SpecialOfferItem {
+  productId: string;
+  productNameAr: string;
+  productNameEn?: string;
+  quantity: number;
+  productType?: 'DONUT' | 'DRINK';
+  basePrice?: number;
+}
+
+export interface SpecialOffer {
+  id: string; // "off_..."
+  nameAr: string;
+  nameEn?: string;
+  descAr: string;
+  descEn?: string;
+  imageUrl: string;
+  price: number; // السعر بالجنيه المصري (EGP)
+  originalPrice?: number; // إجمالي القيمة الأصلية للقطع المضمنة
+  items: SpecialOfferItem[];
+  startDate?: string;
+  endDate?: string;
+  isActive: boolean;
+  displayOrder?: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type AdPlacement = 'TOP_HERO' | 'BETWEEN_SECTIONS' | 'POPUP_MODAL' | 'FOOTER_BANNER';
+
+export interface Advertisement {
+  id: string; // "ad_..."
+  titleAr: string;
+  titleEn?: string;
+  descAr?: string;
+  descEn?: string;
+  images: string[];
+  mainImage: string;
+  placement: AdPlacement;
+  linkUrl?: string;
+  buttonTextAr?: string;
+  buttonTextEn?: string;
+  startDate?: string;
+  endDate?: string;
+  isActive: boolean;
+  displayOrder: number;
+  createdAt: string;
+  updatedAt: string;
 }

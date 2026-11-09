@@ -122,26 +122,28 @@ export const Navbar: React.FC<NavbarProps> = ({
               onClick={() => onSwitchView(viewMode === 'ADMIN' ? 'STORE' : 'ADMIN')}
               className={`flex items-center gap-1.5 px-3 py-2 text-xs font-black rounded-xl transition border cursor-pointer ${
                 viewMode === 'ADMIN'
-                  ? 'bg-cyan-500 text-white border-cyan-600'
-                  : 'bg-cyan-50 text-cyan-800 hover:bg-cyan-100 border-cyan-200'
+                  ? 'bg-cyan-600 text-white border-cyan-700 shadow-xs'
+                  : 'bg-cyan-50 text-cyan-800 hover:bg-cyan-100 border-cyan-300'
               }`}
+              title={viewMode === 'ADMIN' ? t.customerStore : (currentUser.role === 'OWNER' ? (lang === 'ar' ? 'لوحة المالك' : 'Owner') : t.adminPortal)}
             >
-              <ShieldCheck className="w-4 h-4" />
-              <span className="hidden lg:inline">
+              <ShieldCheck className={`w-4 h-4 ${viewMode === 'ADMIN' ? 'text-white' : 'text-cyan-600'}`} />
+              <span className="inline text-[11px] font-black">
                 {viewMode === 'ADMIN'
-                  ? t.customerStore
+                  ? (lang === 'ar' ? 'المتجر' : 'Store')
                   : currentUser.role === 'OWNER'
-                  ? (lang === 'ar' ? 'لوحة المالك (Owner)' : 'Owner Portal')
-                  : t.adminPortal}
+                  ? (lang === 'ar' ? 'لوحة المالك' : 'Owner')
+                  : (lang === 'ar' ? 'الإدارة' : 'Admin')}
               </span>
             </button>
           ) : (
             <button
               onClick={onOpenAdmin}
-              className="text-slate-400 hover:text-slate-700 p-2 text-xs font-medium rounded-lg hover:bg-slate-100 transition cursor-pointer"
+              className="flex items-center gap-1 px-2.5 py-2 text-slate-500 hover:text-cyan-600 text-[11px] font-bold rounded-xl border border-slate-200 hover:border-cyan-300 hover:bg-cyan-50/50 transition cursor-pointer"
               title={t.adminPortal}
             >
-              <ShieldCheck className="w-4 h-4" />
+              <ShieldCheck className="w-3.5 h-3.5 text-cyan-600" />
+              <span className="inline">{lang === 'ar' ? 'دخول الإدارة' : 'Admin'}</span>
             </button>
           )}
         </div>

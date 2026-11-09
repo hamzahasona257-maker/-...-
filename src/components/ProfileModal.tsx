@@ -263,7 +263,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
                     >
                       {locations.map((loc) => (
                         <option key={loc.id} value={loc.id}>
-                          {loc.governorate} - {loc.city} ({loc.area})
+                          {loc.governorate} - {loc.city} ({loc.area}) — {loc.deliveryFee} {t.currency} توصيل
                         </option>
                       ))}
                     </select>

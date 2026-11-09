@@ -29,6 +29,17 @@ const PORT = process.env.PORT || 3000;
 app.use(express.json({ limit: '20mb' }));
 app.use(express.urlencoded({ extended: true, limit: '20mb' }));
 
+// Global Cache-Control middleware for all /api endpoints to prevent stale data
+app.use('/api', (_req, res, next) => {
+  res.set({
+    'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+    'Pragma': 'no-cache',
+    'Expires': '0',
+    'Surrogate-Control': 'no-store',
+  });
+  next();
+});
+
 // Ensure uploads directory exists
 const UPLOADS_DIR = path.resolve(__dirname, 'uploads');
 if (!fs.existsSync(UPLOADS_DIR)) {
@@ -176,16 +187,17 @@ app.post('/api/auth/register', async (req, res) => {
   }
 });
 
-// Login (Customer, Admin, or Owner)
+// Login (Customer, Admin, or Owner by email or phone)
 app.post('/api/auth/login', async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const rawIdentifier = (req.body.email || req.body.identifier || req.body.phone || '').trim();
+    const password = req.body.password;
 
-    if (!email || !password) {
-      return res.status(400).json({ error: 'يرجى إدخال البريد الإلكتروني وكلمة المرور.' });
+    if (!rawIdentifier || !password) {
+      return res.status(400).json({ error: 'يرجى إدخال البريد الإلكتروني أو رقم الهاتف وكلمة المرور.' });
     }
 
-    const user = db.getUserByEmail(email);
+    const user = db.getUserByIdentifier(rawIdentifier);
     if (!user) {
       return res.status(401).json({ error: 'بيانات الدخول غير صحيحة.' });
     }
@@ -268,22 +280,6 @@ app.put('/api/owner/profile', requireOwner, async (req: AuthenticatedRequest, re
     });
   } catch (err: any) {
     return res.status(400).json({ error: err.message || 'فشل تحديث بيانات المالك.' });
-  }
-});
-
-// Reset Owner Slot (Allows current Owner to clear slot and re-open first-time registration)
-app.post('/api/owner/reset-slot', requireOwner, (req: AuthenticatedRequest, res: Response) => {
-  try {
-    const success = db.resetOwnerSlot(req.user!.id);
-    if (!success) {
-      return res.status(400).json({ error: 'تعذر تفريغ خانة مالك المتجر.' });
-    }
-    return res.json({
-      success: true,
-      message: 'تم تفريغ خانة مالك المتجر بنجاح. شاشة تسجيل المالك الأول أصبحت متاحة الآن.',
-    });
-  } catch (err: any) {
-    return res.status(400).json({ error: err.message });
   }
 });
 
@@ -1089,18 +1085,23 @@ app.post(
     try {
       const { governorate, city, area, deliveryFee, minOrder, estimatedMin, isActive } = req.body;
 
-      if (!governorate || !city || !area || deliveryFee === undefined) {
+      if (!governorate || !city || !area || deliveryFee === undefined || deliveryFee === null || deliveryFee === '') {
         return res.status(400).json({ error: 'المحافظة، المدينة، المنطقة، ورسوم التوصيل مطلوبة.' });
+      }
+
+      const numFee = Number(deliveryFee);
+      if (isNaN(numFee) || numFee < 0) {
+        return res.status(400).json({ error: 'رسوم التوصيل يجب أن تكون قيمة رقمية صحيحة (صفر أو أكثر بالجنيه المصري).' });
       }
 
       const newLoc = db.createDeliveryLocation(
         {
-          governorate,
-          city,
-          area,
-          deliveryFee: parseFloat(Number(deliveryFee).toFixed(2)),
+          governorate: String(governorate).trim(),
+          city: String(city).trim(),
+          area: String(area).trim(),
+          deliveryFee: parseFloat(numFee.toFixed(2)),
           minOrder: minOrder ? parseFloat(Number(minOrder).toFixed(2)) : 0,
-          estimatedMin: estimatedMin ? parseInt(estimatedMin, 10) : 45,
+          estimatedMin: estimatedMin ? parseInt(String(estimatedMin), 10) : 45,
           isActive: isActive !== false,
         },
         req.user
@@ -1119,12 +1120,17 @@ app.put(
   (req: AuthenticatedRequest, res: Response) => {
     try {
       const updates = req.body;
-      if (updates.deliveryFee !== undefined)
-        updates.deliveryFee = parseFloat(Number(updates.deliveryFee).toFixed(2));
+      if (updates.deliveryFee !== undefined) {
+        const numFee = Number(updates.deliveryFee);
+        if (isNaN(numFee) || numFee < 0) {
+          return res.status(400).json({ error: 'رسوم التوصيل يجب أن تكون قيمة رقمية صحيحة (صفر أو أكثر بالجنيه المصري).' });
+        }
+        updates.deliveryFee = parseFloat(numFee.toFixed(2));
+      }
       if (updates.minOrder !== undefined)
         updates.minOrder = parseFloat(Number(updates.minOrder).toFixed(2));
       if (updates.estimatedMin !== undefined)
-        updates.estimatedMin = parseInt(updates.estimatedMin, 10);
+        updates.estimatedMin = parseInt(String(updates.estimatedMin), 10);
 
       const updated = db.updateDeliveryLocation(req.params.id, updates, req.user);
       if (!updated) return res.status(404).json({ error: 'منطقة التوصيل غير موجودة.' });
@@ -1190,6 +1196,257 @@ app.patch(
 app.get('/api/admin/stats', requireAdmin, (_req, res) => {
   const analytics = db.getAnalytics();
   return res.json(analytics);
+});
+
+// --------------------------------------------------------------------------
+// 11.5 Monthly Accounting & Archiving System (Owner-Only)
+// --------------------------------------------------------------------------
+
+// Get list of available months and active accounting period
+app.get('/api/owner/accounting/months', requireOwner, (_req: AuthenticatedRequest, res: Response) => {
+  try {
+    const data = db.getAvailableAccountingMonths();
+    return res.json(data);
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message || 'فشل جلب الأشهر المحاسبية.' });
+  }
+});
+
+// Get comprehensive monthly financial report
+app.get('/api/owner/accounting/report/:monthKey', requireOwner, (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { monthKey } = req.params;
+    if (!monthKey || !/^\d{4}-\d{2}$/.test(monthKey)) {
+      return res.status(400).json({ error: 'صيغة الشهر المحاسبي غير صحيحة (YYYY-MM).' });
+    }
+    const report = db.getMonthlyAccountingReport(monthKey);
+    return res.json({ report });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message || 'فشل توليد التقرير المحاسبي الشهري.' });
+  }
+});
+
+// Close a month and permanently archive its records (Owner-Only)
+app.post('/api/owner/accounting/close/:monthKey', requireOwner, (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { monthKey } = req.params;
+    const { notes } = req.body;
+    if (!monthKey || !/^\d{4}-\d{2}$/.test(monthKey)) {
+      return res.status(400).json({ error: 'صيغة الشهر المحاسبي غير صحيحة (YYYY-MM).' });
+    }
+    const archive = db.closeAccountingMonth(monthKey, notes, req.user!);
+    return res.json({
+      message: `تم إغلاق شهر (${archive.summary.monthNameAr}) وأرشفة كافة سجلاته المالية والتشغيلية بنجاح.`,
+      archive,
+    });
+  } catch (err: any) {
+    return res.status(400).json({ error: err.message || 'فشل إغلاق الشهر المحاسبي.' });
+  }
+});
+
+// Start a new operational accounting month (Owner-Only)
+app.post('/api/owner/accounting/start-new-period', requireOwner, (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { monthKey } = req.body;
+    if (!monthKey || !/^\d{4}-\d{2}$/.test(monthKey)) {
+      return res.status(400).json({ error: 'صيغة الشهر المحاسبي الجديد غير صحيحة (YYYY-MM).' });
+    }
+    const result = db.startNewAccountingPeriod(monthKey, req.user!);
+    return res.json({
+      message: `تم بدء الفترة التشغيلية المحاسبية الجديدة بنجاح (${monthKey}).`,
+      activeMonth: result.activeMonth,
+    });
+  } catch (err: any) {
+    return res.status(400).json({ error: err.message || 'فشل بدء الفترة المحاسبية الجديدة.' });
+  }
+});
+
+// Reopen a closed month (Owner-Only)
+app.post('/api/owner/accounting/reopen/:monthKey', requireOwner, (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { monthKey } = req.params;
+    const result = db.reopenAccountingMonth(monthKey, req.user!);
+    return res.json(result);
+  } catch (err: any) {
+    return res.status(400).json({ error: err.message || 'فشل إعادة فتح الشهر المحاسبي.' });
+  }
+});
+
+// --------------------------------------------------------------------------
+// 11.8 Offers System (Public & Admin)
+// --------------------------------------------------------------------------
+
+// Public offers
+app.get('/api/offers', (_req: Request, res: Response) => {
+  try {
+    const offers = db.getOffers(true);
+    return res.json({ offers });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message || 'فشل جلب العروض.' });
+  }
+});
+
+app.get('/api/offers/:id', (req: Request, res: Response) => {
+  try {
+    const offer = db.getOfferById(req.params.id);
+    if (!offer) {
+      return res.status(404).json({ error: 'العرض غير موجود.' });
+    }
+    return res.json({ offer });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message || 'فشل جلب تفاصيل العرض.' });
+  }
+});
+
+// Admin offers
+app.get('/api/admin/offers', requireAuth, (req: AuthenticatedRequest, res: Response) => {
+  try {
+    if (req.user?.role !== 'OWNER' && req.user?.role !== 'ADMIN') {
+      return res.status(403).json({ error: 'غير مصرح.' });
+    }
+    const offers = db.getAdminOffers();
+    return res.json({ offers });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message || 'فشل جلب العروض للإدارة.' });
+  }
+});
+
+app.post('/api/admin/offers', requireAuth, (req: AuthenticatedRequest, res: Response) => {
+  try {
+    if (req.user?.role !== 'OWNER' && req.user?.role !== 'ADMIN') {
+      return res.status(403).json({ error: 'غير مصرح.' });
+    }
+    const offer = db.createOffer(req.body, req.user!);
+    return res.json({ message: 'تم إنشاء العرض بنجاح.', offer });
+  } catch (err: any) {
+    return res.status(400).json({ error: err.message || 'فشل إنشاء العرض.' });
+  }
+});
+
+app.put('/api/admin/offers/:id', requireAuth, (req: AuthenticatedRequest, res: Response) => {
+  try {
+    if (req.user?.role !== 'OWNER' && req.user?.role !== 'ADMIN') {
+      return res.status(403).json({ error: 'غير مصرح.' });
+    }
+    const offer = db.updateOffer(req.params.id, req.body, req.user!);
+    return res.json({ message: 'تم تحديث العرض بنجاح.', offer });
+  } catch (err: any) {
+    return res.status(400).json({ error: err.message || 'فشل تحديث العرض.' });
+  }
+});
+
+app.delete('/api/admin/offers/:id', requireAuth, (req: AuthenticatedRequest, res: Response) => {
+  try {
+    if (req.user?.role !== 'OWNER' && req.user?.role !== 'ADMIN') {
+      return res.status(403).json({ error: 'غير مصرح.' });
+    }
+    const success = db.deleteOffer(req.params.id, req.user!);
+    if (!success) return res.status(404).json({ error: 'العرض غير موجود.' });
+    return res.json({ message: 'تم حذف العرض بنجاح.' });
+  } catch (err: any) {
+    return res.status(400).json({ error: err.message || 'فشل حذف العرض.' });
+  }
+});
+
+app.patch('/api/admin/offers/:id/toggle-active', requireAuth, (req: AuthenticatedRequest, res: Response) => {
+  try {
+    if (req.user?.role !== 'OWNER' && req.user?.role !== 'ADMIN') {
+      return res.status(403).json({ error: 'غير مصرح.' });
+    }
+    const offer = db.toggleOfferActive(req.params.id, req.user!);
+    return res.json({ message: 'تم تغيير حالة العرض بنجاح.', offer });
+  } catch (err: any) {
+    return res.status(400).json({ error: err.message || 'فشل تغيير حالة العرض.' });
+  }
+});
+
+// --------------------------------------------------------------------------
+// 11.9 Dedicated Advertisements System (Public & Admin)
+// --------------------------------------------------------------------------
+
+// Public advertisements
+app.get('/api/advertisements', (req: Request, res: Response) => {
+  try {
+    const placement = typeof req.query.placement === 'string' ? (req.query.placement as any) : undefined;
+    const advertisements = db.getAdvertisements(true, placement);
+    return res.json({ advertisements });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message || 'فشل جلب الإعلانات.' });
+  }
+});
+
+// Admin advertisements
+app.get('/api/admin/advertisements', requireAuth, (req: AuthenticatedRequest, res: Response) => {
+  try {
+    if (req.user?.role !== 'OWNER' && req.user?.role !== 'ADMIN') {
+      return res.status(403).json({ error: 'غير مصرح.' });
+    }
+    const advertisements = db.getAdminAdvertisements();
+    return res.json({ advertisements });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message || 'فشل جلب الإعلانات للإدارة.' });
+  }
+});
+
+app.post('/api/admin/advertisements', requireAuth, (req: AuthenticatedRequest, res: Response) => {
+  try {
+    if (req.user?.role !== 'OWNER' && req.user?.role !== 'ADMIN') {
+      return res.status(403).json({ error: 'غير مصرح.' });
+    }
+    const advertisement = db.createAdvertisement(req.body, req.user!);
+    return res.json({ message: 'تم إنشاء الإعلان بنجاح.', advertisement });
+  } catch (err: any) {
+    return res.status(400).json({ error: err.message || 'فشل إنشاء الإعلان.' });
+  }
+});
+
+app.put('/api/admin/advertisements/:id', requireAuth, (req: AuthenticatedRequest, res: Response) => {
+  try {
+    if (req.user?.role !== 'OWNER' && req.user?.role !== 'ADMIN') {
+      return res.status(403).json({ error: 'غير مصرح.' });
+    }
+    const advertisement = db.updateAdvertisement(req.params.id, req.body, req.user!);
+    return res.json({ message: 'تم تحديث الإعلان بنجاح.', advertisement });
+  } catch (err: any) {
+    return res.status(400).json({ error: err.message || 'فشل تحديث الإعلان.' });
+  }
+});
+
+app.delete('/api/admin/advertisements/:id', requireAuth, (req: AuthenticatedRequest, res: Response) => {
+  try {
+    if (req.user?.role !== 'OWNER' && req.user?.role !== 'ADMIN') {
+      return res.status(403).json({ error: 'غير مصرح.' });
+    }
+    const success = db.deleteAdvertisement(req.params.id, req.user!);
+    if (!success) return res.status(404).json({ error: 'الإعلان غير موجود.' });
+    return res.json({ message: 'تم حذف الإعلان بنجاح.' });
+  } catch (err: any) {
+    return res.status(400).json({ error: err.message || 'فشل حذف الإعلان.' });
+  }
+});
+
+app.patch('/api/admin/advertisements/:id/toggle-active', requireAuth, (req: AuthenticatedRequest, res: Response) => {
+  try {
+    if (req.user?.role !== 'OWNER' && req.user?.role !== 'ADMIN') {
+      return res.status(403).json({ error: 'غير مصرح.' });
+    }
+    const advertisement = db.toggleAdvertisementActive(req.params.id, req.user!);
+    return res.json({ message: 'تم تغيير حالة الإعلان بنجاح.', advertisement });
+  } catch (err: any) {
+    return res.status(400).json({ error: err.message || 'فشل تغيير حالة الإعلان.' });
+  }
+});
+
+app.post('/api/admin/advertisements/reorder', requireAuth, (req: AuthenticatedRequest, res: Response) => {
+  try {
+    if (req.user?.role !== 'OWNER' && req.user?.role !== 'ADMIN') {
+      return res.status(403).json({ error: 'غير مصرح.' });
+    }
+    const advertisements = db.reorderAdvertisements(req.body.orderedIds, req.user!);
+    return res.json({ message: 'تم تحديث ترتيب الإعلانات بنجاح.', advertisements });
+  } catch (err: any) {
+    return res.status(400).json({ error: err.message || 'فشل إعادة ترتيب الإعلانات.' });
+  }
 });
 
 // --------------------------------------------------------------------------

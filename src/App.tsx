@@ -1,6 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import { Language, translations } from './lib/i18n.ts';
-import { DonutProduct, Category, DeliveryLocation, CartItem, UserProfile, Order, StoreSettings, CustomizationGroup } from './types.ts';
+import {
+  DonutProduct,
+  Category,
+  DeliveryLocation,
+  CartItem,
+  UserProfile,
+  Order,
+  StoreSettings,
+  CustomizationGroup,
+  SpecialOffer,
+  Advertisement,
+} from './types.ts';
 import { api, getToken } from './lib/api.ts';
 import { Navbar } from './components/Navbar.tsx';
 import { Hero } from './components/Hero.tsx';
@@ -14,6 +25,10 @@ import { AuthModal } from './components/AuthModal.tsx';
 import { ProfileModal } from './components/ProfileModal.tsx';
 import { AdminDashboard } from './components/AdminDashboard.tsx';
 import { ProductDetailsModal } from './components/ProductDetailsModal.tsx';
+import { SpecialOffersSection } from './components/SpecialOffersSection.tsx';
+import { OfferDetailsModal } from './components/OfferDetailsModal.tsx';
+import { AdvertisementBanners } from './components/AdvertisementBanners.tsx';
+import { AdvertisementPopupModal } from './components/AdvertisementPopupModal.tsx';
 
 export default function App() {
   // Arabic is the default language
@@ -66,17 +81,6 @@ export default function App() {
     localStorage.setItem('wave_cart_eg', JSON.stringify(cart));
   }, [cart]);
 
-  // Save viewMode
-  useEffect(() => {
-    localStorage.setItem('wave_view_mode', viewMode);
-  }, [viewMode]);
-
-  // Set Arabic RTL by default or LTR if English is selected
-  useEffect(() => {
-    document.documentElement.dir = lang === 'ar' ? 'rtl' : 'ltr';
-    document.documentElement.lang = lang;
-  }, [lang]);
-
   // Initial load
   useEffect(() => {
     loadStoreSettings();
@@ -89,17 +93,21 @@ export default function App() {
   const loadStoreSettings = async () => {
     try {
       const res = await api.getSettings();
-      if (res.settings) setSettings(res.settings);
+      if (res && res.settings && typeof res.settings === 'object') {
+        setSettings(res.settings);
+      }
     } catch (err) {
-      console.error(err);
+      console.error('Error loading store settings:', err);
     }
   };
 
   const loadDonuts = async () => {
     try {
       const res = await api.getDonuts();
-      if (res.products) setProducts(res.products);
-      if (res.categories) setCategories(res.categories);
+      if (res) {
+        if (Array.isArray(res.products)) setProducts(res.products);
+        if (Array.isArray(res.categories)) setCategories(res.categories);
+      }
     } catch (err) {
       console.error('Error loading donuts:', err);
     }
@@ -108,7 +116,7 @@ export default function App() {
   const loadCustomizationGroups = async () => {
     try {
       const res = await api.getCustomizationGroups();
-      if (res.groups) setCustomizationGroups(res.groups);
+      if (res && Array.isArray(res.groups)) setCustomizationGroups(res.groups);
     } catch (err) {
       console.error('Error loading customization groups:', err);
     }
@@ -117,10 +125,18 @@ export default function App() {
   const loadLocations = async () => {
     try {
       const res = await api.getDeliveryLocations();
-      if (res.locations) {
+      if (res && Array.isArray(res.locations)) {
         setDeliveryLocations(res.locations);
-        if (res.locations.length > 0 && !selectedLocation) {
-          setSelectedLocation(res.locations[0]);
+        if (res.locations.length > 0) {
+          setSelectedLocation((prev) => {
+            if (prev) {
+              const fresh = res.locations.find((l: DeliveryLocation) => l.id === prev.id);
+              return fresh || res.locations[0];
+            }
+            return res.locations[0];
+          });
+        } else {
+          setSelectedLocation(null);
         }
       }
     } catch (err) {
@@ -128,17 +144,65 @@ export default function App() {
     }
   };
 
+  const refreshAllData = async () => {
+    await Promise.all([
+      loadStoreSettings(),
+      loadDonuts(),
+      loadCustomizationGroups(),
+      loadLocations(),
+    ]);
+  };
+
+  // Synchronize data safely when app becomes visible or focused
+  useEffect(() => {
+    const handleSyncOnVisible = () => {
+      if (document.visibilityState === 'visible') {
+        refreshAllData();
+      }
+    };
+    window.addEventListener('visibilitychange', handleSyncOnVisible);
+    window.addEventListener('focus', handleSyncOnVisible);
+    return () => {
+      window.removeEventListener('visibilitychange', handleSyncOnVisible);
+      window.removeEventListener('focus', handleSyncOnVisible);
+    };
+  }, []);
+
+  // Save viewMode & refresh storefront when returning from admin
+  useEffect(() => {
+    localStorage.setItem('wave_view_mode', viewMode);
+    if (viewMode === 'STORE') {
+      refreshAllData();
+    }
+  }, [viewMode]);
+
+  // Set Arabic RTL by default or LTR if English is selected
+  useEffect(() => {
+    document.documentElement.dir = lang === 'ar' ? 'rtl' : 'ltr';
+    document.documentElement.lang = lang;
+  }, [lang]);
+
   const loadCurrentUser = async () => {
     const token = getToken();
     if (!token) return;
     try {
       const res = await api.getMe();
-      if (res.user) {
+      if (res && res.user) {
         setCurrentUser(res.user);
+        // Ensure Owner remains in Admin Dashboard if previously in Admin or by default for owner session
+        const savedView = localStorage.getItem('wave_view_mode');
+        if ((res.user.role === 'OWNER' || res.user.role === 'ADMIN') && savedView !== 'STORE') {
+          setViewMode('ADMIN');
+        }
       }
-    } catch {
-      localStorage.removeItem('wave_token');
-      setCurrentUser(null);
+    } catch (err: any) {
+      // Strictly only remove token if server explicitly returned 401 Unauthorized or 403 Forbidden
+      if (err?.status === 401 || err?.status === 403) {
+        localStorage.removeItem('wave_token');
+        setCurrentUser(null);
+      } else {
+        console.warn('Transient error checking current user session, preserving token:', err?.message || err);
+      }
     }
   };
 
@@ -231,6 +295,7 @@ export default function App() {
           products={products}
           categories={categories}
           deliveryLocations={deliveryLocations}
+          onUpdateSettings={(updated) => setSettings(updated)}
           onReloadProducts={() => {
             loadDonuts();
             loadStoreSettings();
@@ -398,8 +463,9 @@ export default function App() {
               onClose={() => setIsAuthOpen(false)}
               onSuccess={(user) => {
                 setCurrentUser(user);
-                if (authAdminTarget && (user.role === 'ADMIN' || user.role === 'OWNER')) {
+                if (user.role === 'ADMIN' || user.role === 'OWNER') {
                   setViewMode('ADMIN');
+                  localStorage.setItem('wave_view_mode', 'ADMIN');
                 }
                 showToast(
                   lang === 'ar'

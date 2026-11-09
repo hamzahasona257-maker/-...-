@@ -33,7 +33,8 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
   const t = translations[lang];
 
   const subtotal = items.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0);
-  const deliveryFee = selectedLocation ? selectedLocation.deliveryFee : (locations[0]?.deliveryFee || 0);
+  const effectiveLoc = selectedLocation || (locations.length > 0 ? locations[0] : null);
+  const deliveryFee = effectiveLoc ? Number(effectiveLoc.deliveryFee) : 0;
   const total = subtotal + (items.length > 0 ? deliveryFee : 0);
 
   return (
@@ -90,10 +91,22 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                   )}
 
                   <div className="flex-1 min-w-0">
-                    <h4 className="text-xs font-bold text-slate-900 truncate">
-                      {item.product.nameAr}
-                    </h4>
-                    {item.selectedOption && (
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      {item.isOffer && (
+                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-gradient-to-r from-amber-500 to-orange-500 text-white text-[9px] font-black">
+                          🔥 عرض خاص
+                        </span>
+                      )}
+                      <h4 className="text-xs font-bold text-slate-900 truncate">
+                        {item.product.nameAr}
+                      </h4>
+                    </div>
+                    {item.offerItemsSummary && (
+                      <p className="text-[10px] text-amber-700 bg-amber-50 border border-amber-200/60 rounded px-1.5 py-0.5 mt-1 font-medium leading-relaxed">
+                        {item.offerItemsSummary}
+                      </p>
+                    )}
+                    {item.selectedOption && !item.offerItemsSummary && (
                       <p className="text-[10px] text-pink-600 font-medium truncate mt-0.5">
                         {item.selectedOption}
                       </p>
@@ -173,7 +186,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                   <span>{lang === 'ar' ? 'منطقة التوصيل' : 'Delivery Area'}</span>
                 </label>
                 <select
-                  value={selectedLocation?.id || locations[0]?.id || ''}
+                  value={effectiveLoc?.id || ''}
                   onChange={(e) => {
                     const l = locations.find((item) => item.id === e.target.value);
                     if (l) onSelectLocation(l);
@@ -182,10 +195,19 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                 >
                   {locations.map((loc) => (
                     <option key={loc.id} value={loc.id}>
-                      {loc.governorate} - {loc.city} ({loc.area}) (+{loc.deliveryFee} ج.م.)
+                      {loc.governorate} - {loc.city} ({loc.area}) — {loc.deliveryFee} {t.currency} توصيل
                     </option>
                   ))}
                 </select>
+              </div>
+            )}
+
+            {/* Minimum Order Warning per Area */}
+            {effectiveLoc && effectiveLoc.minOrder > 0 && subtotal < effectiveLoc.minOrder && (
+              <div className="p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-[11px] font-semibold">
+                {lang === 'ar'
+                  ? `الحد الأدنى للطلب لمنطقة (${effectiveLoc.area}) هو ${effectiveLoc.minOrder} ج.م. (متبقي ${effectiveLoc.minOrder - subtotal} ج.م.)`
+                  : `Minimum order for (${effectiveLoc.area}) is ${effectiveLoc.minOrder} ${t.currency} (${effectiveLoc.minOrder - subtotal} ${t.currency} remaining)`}
               </div>
             )}
 
@@ -195,10 +217,15 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                 <span>{t.subtotal}</span>
                 <span className="font-bold tabular-nums text-slate-900 font-mono">{subtotal} {t.currency}</span>
               </div>
-              <div className="flex justify-between">
-                <span>{t.deliveryFee}</span>
+              <div className="flex justify-between items-center">
+                <span className="flex items-center gap-1">
+                  <span>{t.deliveryFee}</span>
+                  {effectiveLoc && (
+                    <span className="text-[10px] text-slate-500 font-semibold">({effectiveLoc.area})</span>
+                  )}
+                </span>
                 <span className="font-bold tabular-nums text-cyan-600 font-mono">
-                  {deliveryFee > 0 ? `${deliveryFee} ${t.currency}` : (lang === 'ar' ? 'حسب العنوان' : 'Per location')}
+                  {effectiveLoc ? `${deliveryFee} ${t.currency}` : (lang === 'ar' ? 'حسب المنطقة' : 'Per location')}
                 </span>
               </div>
               <div className="flex justify-between text-base font-black text-slate-900 pt-2 border-t border-slate-100">
